@@ -1,44 +1,83 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-arthsetu}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arthsetu}
       POSTGRES_DB: ${POSTGRES_DB:-arthsetu}
     volumes:
       - db_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Not published to the host — only the backend needs to reach it, over
+    # the compose network by service name. Use `docker compose exec db
+    # psql ...` for direct access instead of a host port.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-arthsetu}"]
       interval: 5s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
 
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    restart: unless-stopped
     environment:
+      # Defaults to development so `docker compose up` works with zero
+      # config for a trial run. A real deployment sets APP_ENV=production
+      # in .env — the app then refuses to start unless SECRET_KEY and
+      # BOOTSTRAP_ADMIN_PASSWORD have also been overridden (see
+      # backend/app/core/config.py).
+      APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-arthsetu}:${POSTGRES_PASSWORD:-arthsetu}@db:5432/${POSTGRES_DB:-arthsetu}
       SECRET_KEY: ${SECRET_KEY:-dev-insecure-change-me-in-production}
-      CORS_ORIGINS: http://localhost:5173,http://localhost:8080
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-arthsetu-admin}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
-      - "8080:80"
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
 
 volumes:
   db_data:

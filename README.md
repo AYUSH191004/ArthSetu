@@ -605,10 +605,17 @@ The dev server proxies `/api` to the backend, so start the API first. See
 
 ```bash
 docker compose up --build
-docker compose exec backend python -m backend.seed_dev --reset   # once, after it's healthy
+docker compose exec backend python -m backend.seed_dev --reset   # optional: synthetic demo data
 ```
 Runs Postgres + the API (`:8000`, migrations applied on start) + the
-frontend behind nginx (`:8080`). See [`Docs/API_CONTRACT.md`](Docs/API_CONTRACT.md#running-with-docker).
+frontend behind nginx (`:8080`). Works with zero config for a trial run —
+a fresh container bootstraps one admin login (`admin` / `arthsetu-admin`
+by default). For a real deployment, copy `.env.docker.example` to `.env`
+and set `APP_ENV=production` plus real secrets; the backend refuses to
+start in production with the default `SECRET_KEY` or bootstrap password.
+See [`Docs/API_CONTRACT.md`](Docs/API_CONTRACT.md#running-with-docker) for
+the full hardening notes (non-root containers, health checks, resource
+limits, nginx security headers).
 
 ## Auth
 

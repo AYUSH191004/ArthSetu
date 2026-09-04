@@ -303,8 +303,26 @@ docker compose up --build
 ```
 Brings up Postgres, the API (`alembic upgrade head` runs on container start)
 on `:8000`, and the frontend behind nginx on `:8080` (nginx proxies `/api/`
-to the backend container, so the SPA needs no CORS config). Seed it once
-the containers are healthy:
+to the backend container, so the SPA needs no CORS config). With no `.env`
+file this runs in `APP_ENV=development` with insecure demo defaults, so it
+works out of the box for a trial. On first boot, if the `user_account`
+table is empty, the API creates one admin account from
+`BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` (default
+`admin` / `arthsetu-admin`) — that's the login for a fresh container.
+Load the synthetic demo dataset on top of it if you want one:
 ```bash
 docker compose exec backend python -m backend.seed_dev --reset
 ```
+
+**For a real deployment**, copy `.env.docker.example` to `.env` (repo root)
+and fill in `SECRET_KEY`, `BOOTSTRAP_ADMIN_PASSWORD`, and `POSTGRES_PASSWORD`,
+then set `APP_ENV=production`. The backend refuses to start in production
+with the default secret key or bootstrap password still in place — a
+deliberate fail-fast guard (`backend/app/core/config.py`), not a bug, so
+double-check `docker compose logs backend` if the container exits
+immediately. Hardening baked into the images:
+- backend and frontend containers run as non-root users
+- both have `HEALTHCHECK`s wired into compose's `depends_on: condition: service_healthy`
+- Postgres isn't published to the host — only reachable from the backend over the compose network
+- CPU/memory limits and `restart: unless-stopped` on every service
+- nginx: security headers (`X-Frame-Options`, `X-Content-Type-Options`, etc.), gzip, `server_tokens off`, immutable caching on hashed assets, `no-cache` on `index.html`
