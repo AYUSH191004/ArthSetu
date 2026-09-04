@@ -23,7 +23,7 @@ const nav: {
   end?: boolean;
   role?: Role;
 }[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/businesses", label: "Business Search", icon: Search },
   { to: "/reviews", label: "Review Queue", icon: ClipboardCheck },
   { to: "/corrections", label: "Corrections", icon: History, role: "reviewer" },

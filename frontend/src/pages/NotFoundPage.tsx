@@ -8,7 +8,7 @@ export function NotFoundPage() {
       <p className="text-[13px] text-ink-muted">
         That page isn&apos;t part of the console.
       </p>
-      <Link to="/">
+      <Link to="/dashboard">
         <Button variant="secondary" size="sm">
           Back to dashboard
         </Button>

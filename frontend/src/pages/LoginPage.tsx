@@ -12,7 +12,7 @@ export function LoginPage() {
   const { user, loading, login } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const next = params.get("next") || "/";
+  const next = params.get("next") || "/dashboard";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
