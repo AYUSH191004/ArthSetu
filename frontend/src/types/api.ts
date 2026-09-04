@@ -183,3 +183,36 @@ export interface AuditEntry {
   after_state: unknown;
   created_at: string | null;
 }
+
+// --- Ingestion ---------------------------------------------------------
+
+export interface SourceSystem {
+  code: string;
+  name: string;
+  department: string;
+  record_count: number;
+}
+
+export interface MatchingTally {
+  auto_link: number;
+  review: number;
+  new_entity: number;
+  failed: number;
+}
+
+export interface IngestionReport {
+  source_system: string;
+  rows_read: number;
+  created: number;
+  skipped_duplicates: number;
+  errors: { row: number; error: string }[];
+  matching: MatchingTally | null;
+}
+
+export interface ProcessPendingResult {
+  processed: number;
+  auto_link: number;
+  review: number;
+  new_entity: number;
+  failed: number;
+}

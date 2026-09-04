@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Map,
   Network,
+  UploadCloud,
   Users,
   X,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const nav: {
   { to: "/businesses", label: "Business Search", icon: Search },
   { to: "/reviews", label: "Review Queue", icon: ClipboardCheck },
   { to: "/districts", label: "District Analytics", icon: Map },
+  { to: "/ingest", label: "Data Ingestion", icon: UploadCloud, role: "admin" },
   { to: "/users", label: "Users", icon: Users, role: "admin" },
 ];
 

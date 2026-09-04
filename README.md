@@ -371,6 +371,8 @@ ArthSetu uses a normalized relational architecture.
 React + TypeScript console (Vite + Tailwind, TanStack Query). Complete:
 
 - **Authentication** — login, JWT session, route guards, role-gated UI, admin user management
+- **Data ingestion** (admin) — CSV import with loose header matching, records run through
+  the matching engine on upload, "process pending" for unresolved records
 - **Executive dashboard** — KPIs, activity-trend chart, status breakdown, live audit feed
 - **Business search** — full-text + status/district filters, URL-synced, paginated
 - **Business profile** — identity, linked departmental records, matching evidence,

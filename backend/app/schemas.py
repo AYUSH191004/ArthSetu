@@ -272,3 +272,62 @@ class AuditListResponse(BaseModel):
     limit: int
     offset: int
     items: List[AuditEntry]
+
+
+# ------------------------------------------------------------
+# Ingestion
+# ------------------------------------------------------------
+
+class SourceSystemOut(BaseModel):
+    code: str
+    name: str
+    department: str
+    record_count: int
+
+
+class IngestRecord(BaseModel):
+    external_id: Optional[str] = None
+    name: str
+    pan: Optional[str] = None
+    gstin: Optional[str] = None
+    address: Optional[str] = None
+    pin: Optional[str] = None
+
+
+class IngestRequest(BaseModel):
+    source_system_code: str
+    records: List[IngestRecord]
+    process: bool = True
+
+
+class RowError(BaseModel):
+    row: int
+    error: str
+
+
+class MatchingTallyOut(BaseModel):
+    auto_link: int
+    review: int
+    new_entity: int
+    failed: int
+
+
+class IngestionReportOut(BaseModel):
+    source_system: str
+    rows_read: int
+    created: int
+    skipped_duplicates: int
+    errors: List[RowError]
+    matching: Optional[MatchingTallyOut] = None
+
+
+class ProcessPendingResponse(BaseModel):
+    processed: int
+    auto_link: int
+    review: int
+    new_entity: int
+    failed: int
+
+
+class PendingCountResponse(BaseModel):
+    pending: int

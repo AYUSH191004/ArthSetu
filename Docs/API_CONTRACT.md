@@ -22,6 +22,8 @@ Roles (each includes the ones below it): **admin** > **reviewer** > **viewer**.
 | Approve / reject a review case | reviewer |
 | Batch status recompute (`POST /status/run-all`) | admin |
 | Trigger matching (`POST /matching/process/...`) | admin |
+| Import records (`POST /ingest/csv`, `/ingest/records`, `/ingest/process-pending`) | admin |
+| List source systems / pending count / template | viewer |
 | User management (`/auth/users*`) | admin |
 
 `POST /api/v1/auth/login` — form-encoded (`application/x-www-form-urlencoded`):
@@ -159,6 +161,38 @@ Signals & weights (score is capped at 1.0):
 `decision` is `AUTO_LINK` at ≥ 0.92, `REVIEW` at ≥ 0.70, otherwise `NEW_ENTITY`.
 A strong name + address + PIN match reaches `REVIEW` but never `AUTO_LINK`
 without an id anchor.
+
+## Ingestion
+
+`GET /api/v1/ingest/source-systems` → `[{ code, name, department, record_count }]`
+`GET /api/v1/ingest/pending` → `{ "pending": 157 }` (records not linked and not in review)
+`GET /api/v1/ingest/template` → a sample CSV (`text/csv`)
+
+`POST /api/v1/ingest/csv`  (admin, `multipart/form-data`)
+- `file` — the CSV; `source_system_code` — e.g. `LABOUR`; `process` — bool (default true)
+- Headers are matched loosely: `name` / `firm_name` / `trade_name` / `consumer_name`…,
+  `pan`, `gstin`, `address`, `pin` / `pincode`, `external_id` / `registration_no`…
+  Unrecognised columns are kept in `raw_payload`. Missing `external_id` → a content hash
+  (so re-imports dedupe).
+
+`POST /api/v1/ingest/records`  (admin, JSON)
+```json
+{ "source_system_code": "LABOUR", "process": true,
+  "records": [{ "name": "Punjab Steel Works", "pan": "ABCDE1234F",
+                "address": "Focal Point, Ludhiana", "pin": "141001" }] }
+```
+
+Both return an ingestion report:
+```json
+{ "source_system": "LABOUR", "rows_read": 120, "created": 118,
+  "skipped_duplicates": 2, "errors": [{ "row": 44, "error": "missing business name" }],
+  "matching": { "auto_link": 71, "review": 39, "new_entity": 8, "failed": 0 } }
+```
+
+`POST /api/v1/ingest/process-pending?limit=1000`  (admin) — runs the matcher over
+every unresolved source record → `{ processed, auto_link, review, new_entity, failed }`.
+
+---
 
 ## Audit
 

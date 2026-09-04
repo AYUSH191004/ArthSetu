@@ -7,11 +7,14 @@ import type {
   DashboardResponse,
   DistrictRow,
   HealthResponse,
+  IngestionReport,
   LoginResponse,
   Page,
+  ProcessPendingResult,
   ReviewCaseItem,
   ReviewDecisionResponse,
   Role,
+  SourceSystem,
   StatusResult,
   TrendPoint,
   User,
@@ -122,4 +125,33 @@ export interface AuditParams {
 export const auditApi = {
   list: (params: AuditParams) =>
     api.get<Page<AuditEntry>>("/audit", { params }).then((r) => r.data),
+};
+
+export const ingestApi = {
+  sourceSystems: () =>
+    api.get<SourceSystem[]>("/ingest/source-systems").then((r) => r.data),
+  pending: () =>
+    api.get<{ pending: number }>("/ingest/pending").then((r) => r.data.pending),
+  downloadTemplate: async () => {
+    const res = await api.get<Blob>("/ingest/template", { responseType: "blob" });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "arthsetu_import_template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  uploadCsv: (file: File, sourceSystemCode: string, process: boolean) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("source_system_code", sourceSystemCode);
+    form.append("process", String(process));
+    return api
+      .post<IngestionReport>("/ingest/csv", form)
+      .then((r) => r.data);
+  },
+  processPending: () =>
+    api
+      .post<ProcessPendingResult>("/ingest/process-pending")
+      .then((r) => r.data),
 };

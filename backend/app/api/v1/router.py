@@ -8,6 +8,7 @@ from backend.app.api.v1.routes import (
     business_public,
     dashboard,
     health,
+    ingest,
     matching,
     review,
     status,
@@ -26,6 +27,8 @@ router.include_router(analytics.router, prefix="/analytics", tags=["Analytics"],
 router.include_router(business_public.router, prefix="/business", tags=["Business"], dependencies=_auth)
 router.include_router(audit.router, prefix="/audit", tags=["Audit"], dependencies=_auth)
 router.include_router(review.router, prefix="/reviews", tags=["Review"], dependencies=_auth)
+# ingest: read routes need auth; write routes carry their own require_admin.
+router.include_router(ingest.router, prefix="/ingest", tags=["Ingestion"], dependencies=_auth)
 
 # --- Reviewer or above --------------------------------------------------
 router.include_router(
