@@ -326,3 +326,54 @@ immediately. Hardening baked into the images:
 - Postgres isn't published to the host — only reachable from the backend over the compose network
 - CPU/memory limits and `restart: unless-stopped` on every service
 - nginx: security headers (`X-Frame-Options`, `X-Content-Type-Options`, etc.), gzip, `server_tokens off`, immutable caching on hashed assets, `no-cache` on `index.html`
+
+## Deploying to Vercel + Render
+
+An alternative to self-hosting the compose stack: static frontend on Vercel,
+containerized backend + managed Postgres on Render. The backend image
+listens on `$PORT` when it's set (Render assigns this dynamically; falls
+back to 8000 otherwise), so the same `backend/Dockerfile` works on both
+paths unmodified.
+
+There's a chicken-and-egg between the two platforms — the backend's CORS
+list needs the frontend's URL, the frontend's build needs the backend's URL
+— so deploy in this order:
+
+1. **Backend first.** Render dashboard → New → Blueprint → point it at this
+   repo. [`render.yaml`](../render.yaml) provisions a Postgres instance
+   (`arthsetu-db`) and a Docker web service (`arthsetu-backend`, built from
+   `backend/Dockerfile` with the repo root as build context) wired
+   together, with `SECRET_KEY` and `BOOTSTRAP_ADMIN_PASSWORD` auto-generated
+   (`generateValue: true` — read the actual values off the service's
+   Environment tab after it deploys, you'll need the password to log in).
+   `CORS_ORIGINS` in the blueprint is a placeholder; you'll come back to it
+   in step 3. Note the service's `https://arthsetu-backend.onrender.com`
+   -style URL once it's live and healthy.
+
+2. **Frontend next.** Import the repo into Vercel, set **Root Directory**
+   to `frontend`. Framework preset (Vite) and build command are
+   auto-detected. Add one environment variable before the first build:
+   `VITE_API_BASE_URL=https://<your-render-url>/api/v1` — Vite bakes this
+   into the JS bundle at build time, so it can't be changed later without a
+   rebuild. [`frontend/vercel.json`](../frontend/vercel.json) adds the SPA
+   rewrite (client-side routes 404 on refresh without it) and the same
+   security headers nginx sets in the Docker path. Note the resulting
+   `https://<project>.vercel.app` URL.
+
+3. **Close the loop.** Back on Render, update `CORS_ORIGINS` on
+   `arthsetu-backend` to the real Vercel URL from step 2 (changing an env
+   var triggers a redeploy automatically). Preview-deployment URLs
+   (`<project>-<hash>.vercel.app`) won't match unless added too —
+   `CORS_ORIGINS` is an exact comma-separated list, no wildcards.
+
+4. **Log in** with `BOOTSTRAP_ADMIN_USERNAME` / the generated
+   `BOOTSTRAP_ADMIN_PASSWORD` from step 1. Optionally load the synthetic
+   demo dataset via Render's Shell tab on the backend service:
+   ```bash
+   python -m backend.seed_dev --reset
+   ```
+   **This wipes and recreates every table**, including `user_account` — it
+   replaces the bootstrap admin with the seeder's own demo accounts
+   (`admin` / `arthsetu-admin`, etc., see `Docs/API_CONTRACT.md#authentication`).
+   Fine for a demo deployment; skip it for a real one and keep the
+   generated bootstrap credentials.

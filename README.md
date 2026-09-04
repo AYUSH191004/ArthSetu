@@ -617,6 +617,13 @@ See [`Docs/API_CONTRACT.md`](Docs/API_CONTRACT.md#running-with-docker) for
 the full hardening notes (non-root containers, health checks, resource
 limits, nginx security headers).
 
+## Deploying: Vercel + Render
+
+Frontend on Vercel, backend + Postgres on Render — [`render.yaml`](render.yaml)
+and [`frontend/vercel.json`](frontend/vercel.json) are ready for it. Full
+step-by-step in
+[`Docs/API_CONTRACT.md`](Docs/API_CONTRACT.md#deploying-to-vercel--render).
+
 ## Auth
 
 Every API call except `/health` and `/auth/login` needs a bearer token.

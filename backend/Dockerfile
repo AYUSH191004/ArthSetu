@@ -26,6 +26,6 @@ USER arthsetu
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD python -c "import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3).status==200 else 1)"
+    CMD python -c "import os,urllib.request as u,sys; p=os.environ.get('PORT','8000'); sys.exit(0 if u.urlopen(f'http://127.0.0.1:{p}/api/v1/health', timeout=3).status==200 else 1)"
 
 ENTRYPOINT ["/entrypoint.sh"]

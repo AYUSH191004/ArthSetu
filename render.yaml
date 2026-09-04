@@ -1,0 +1,40 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# In the Render dashboard: New -> Blueprint -> pick this repo. Provisions
+# the API (from backend/Dockerfile) and a managed Postgres together.
+#
+# CORS_ORIGINS below still needs your actual Vercel URL filled in by hand
+# once you know it (Render blueprints can't reference another platform's
+# domain), and BOOTSTRAP_ADMIN_PASSWORD's generated value has to be read
+# from the dashboard after first deploy — see Docs/API_CONTRACT.md.
+
+services:
+  - type: web
+    name: arthsetu-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: arthsetu-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: BOOTSTRAP_ADMIN_USERNAME
+        value: admin
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://arthsetu.vercel.app
+      - key: WEB_CONCURRENCY
+        value: "1"
+
+databases:
+  - name: arthsetu-db
+    plan: starter
+    databaseName: arthsetu
+    user: arthsetu
