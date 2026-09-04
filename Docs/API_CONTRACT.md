@@ -25,6 +25,8 @@ Roles (each includes the ones below it): **admin** > **reviewer** > **viewer**.
 | Trigger matching (`POST /matching/process/...`) | admin |
 | Import records (`POST /ingest/csv`, `/ingest/records`, `/ingest/process-pending`) | admin |
 | List source systems / pending count / template | viewer |
+| Background jobs (`/jobs*`) | admin |
+| Matching weights & calibration (`/matching/weights`, `/matching/calibration`) | admin |
 | User management (`/auth/users*`) | admin |
 
 `POST /api/v1/auth/login` — form-encoded (`application/x-www-form-urlencoded`):
@@ -161,7 +163,11 @@ approve/reject); refuses a second undo of the same action.
 { "business_entity_id": "...", "ubid_code": "UBID000019", "status": "ACTIVE",
   "confidence": 0.735, "reasons": ["POWER_USAGE: base=0.82, age=13d, decay=1.0, score=0.82", ...] }
 ```
-`POST /api/v1/status/run-all` — batch recompute; returns processed/failed/active/dormant/closed counts.
+`POST /api/v1/status/run-all`  (admin) — queues a batch recompute as a
+background job (see **Background Jobs** below) instead of blocking the
+request → `202` + a `Job`. Poll `GET /jobs/{id}`; its `result` has the same
+`processed/failed/active/dormant/closed` shape the old synchronous response
+used to return directly.
 
 ## Matching
 
@@ -171,7 +177,8 @@ approve/reject); refuses a second undo of the same action.
   "reasons": ["Name similarity 0.98", "Address similarity 0.9", "PIN code match (141001)"] }
 ```
 
-Signals & weights (score is capped at 1.0):
+Signals & weights (score is capped at 1.0) — **admin-tunable**, no longer
+fixed constants (defaults shown):
 
 | Signal | Weight | Notes |
 |---|---|---|
@@ -181,9 +188,26 @@ Signals & weights (score is capped at 1.0):
 | Address similarity | 0.28 × score | token-set ratio, filler words removed |
 | PIN code exact | 0.12 | only counts when name similarity ≥ 0.35 |
 
-`decision` is `AUTO_LINK` at ≥ 0.92, `REVIEW` at ≥ 0.70, otherwise `NEW_ENTITY`.
-A strong name + address + PIN match reaches `REVIEW` but never `AUTO_LINK`
-without an id anchor.
+`decision` is `AUTO_LINK` at ≥ `auto_link_threshold` (0.92), `REVIEW` at ≥
+`review_threshold` (0.70), otherwise `NEW_ENTITY`. A strong name + address +
+PIN match reaches `REVIEW` but never `AUTO_LINK` without an id anchor.
+
+`GET /api/v1/matching/weights`  (admin) → the eight tunable values above
+plus `updated_by` / `updated_at`.
+`PUT /api/v1/matching/weights`  (admin) — partial update, e.g.
+`{ "review_threshold": 0.65 }`; each field is `0..1`.
+
+`GET /api/v1/matching/calibration`  (admin) — reviewer-feedback calibration:
+buckets review cases by confidence range and shows the approve/reject split
+in each, plus which evidence signals appear most in decided cases. Decision
+support for tuning the weights above, not auto-tuning.
+```json
+{ "weights": { "...": "..." },
+  "buckets": [{ "label": "0.80 - 0.89", "total": 109, "approved": 1,
+                "rejected": 0, "pending": 108, "approve_rate": 1.0 }],
+  "signals": [{ "signal": "Name", "approved": 1, "rejected": 0 }],
+  "sample_size": 157 }
+```
 
 ## Ingestion
 
@@ -197,8 +221,11 @@ without an id anchor.
   `pan`, `gstin`, `address`, `pin` / `pincode`, `external_id` / `registration_no`…
   Unrecognised columns are kept in `raw_payload`. Missing `external_id` → a content hash
   (so re-imports dedupe).
+- Row creation is synchronous; if `process` is true, matching those rows is
+  queued as a `csv_match` background job (see below) instead of blocking the
+  upload — a large batch no longer holds the request open.
 
-`POST /api/v1/ingest/records`  (admin, JSON)
+`POST /api/v1/ingest/records`  (admin, JSON) — same shape, same job behaviour.
 ```json
 { "source_system_code": "LABOUR", "process": true,
   "records": [{ "name": "Punjab Steel Works", "pan": "ABCDE1234F",
@@ -209,11 +236,35 @@ Both return an ingestion report:
 ```json
 { "source_system": "LABOUR", "rows_read": 120, "created": 118,
   "skipped_duplicates": 2, "errors": [{ "row": 44, "error": "missing business name" }],
-  "matching": { "auto_link": 71, "review": 39, "new_entity": 8, "failed": 0 } }
+  "matching": null, "job_id": "..." }
 ```
+`matching` is populated inline only if the job already finished by response
+time (small batches, or `JOBS_SYNC=1`); otherwise poll `GET /jobs/{job_id}`.
 
-`POST /api/v1/ingest/process-pending?limit=1000`  (admin) — runs the matcher over
-every unresolved source record → `{ processed, auto_link, review, new_entity, failed }`.
+`POST /api/v1/ingest/process-pending?limit=1000`  (admin) — queues a
+`process_pending` job over every unresolved source record → `202` + a `Job`.
+Its `result` is `{ processed, auto_link, review, new_entity, failed }`.
+
+---
+
+## Background Jobs  (admin — see job_runner.py)
+
+Batch status recompute and bulk matching run off the request thread on a
+small in-process worker pool — no external queue/broker, just a DB-tracked
+`Job` row so callers get a pollable status and an audit trail. Endpoints
+that queue one return `202` with the `Job` below immediately; poll it.
+
+`GET  /api/v1/jobs?job_type=&status=&limit=25&offset=0` → paged job history.
+`GET  /api/v1/jobs/{id}` → one job (404 if unknown).
+```json
+{ "id": "...", "job_type": "status_run_all", "status": "succeeded",
+  "payload": {}, "result": { "processed": 148, "failed": 0, "active": 65,
+  "dormant": 25, "closed": 58, "errors": [] }, "error": null,
+  "created_by": "admin", "created_at": "...", "started_at": "...",
+  "finished_at": "..." }
+```
+`status` is `pending` → `running` → `succeeded` / `failed`. `job_type` is
+one of `status_run_all`, `process_pending`, `csv_match`.
 
 ---
 
@@ -244,3 +295,16 @@ python -m uvicorn backend.app.main:app --reload
 DB defaults to `sqlite:///./arthsetu_dev.db`. Override with `DATABASE_URL`
 (e.g. Postgres) in `backend/.env`. Schema is managed by Alembic
 (`alembic upgrade head`); the dev seeder also creates tables directly.
+
+## Running with Docker
+
+```bash
+docker compose up --build
+```
+Brings up Postgres, the API (`alembic upgrade head` runs on container start)
+on `:8000`, and the frontend behind nginx on `:8080` (nginx proxies `/api/`
+to the backend container, so the SPA needs no CORS config). Seed it once
+the containers are healthy:
+```bash
+docker compose exec backend python -m backend.seed_dev --reset
+```

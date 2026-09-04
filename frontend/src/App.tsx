@@ -9,6 +9,8 @@ import { ReviewQueuePage } from "@/pages/ReviewQueuePage";
 import { DistrictAnalyticsPage } from "@/pages/DistrictAnalyticsPage";
 import { CorrectionsPage } from "@/pages/CorrectionsPage";
 import { IngestionPage } from "@/pages/IngestionPage";
+import { JobsPage } from "@/pages/JobsPage";
+import { MatchingConfigPage } from "@/pages/MatchingConfigPage";
 import { UsersPage } from "@/pages/UsersPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 
@@ -42,6 +44,22 @@ export default function App() {
           element={
             <RequireAuth role="admin">
               <IngestionPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="jobs"
+          element={
+            <RequireAuth role="admin">
+              <JobsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="matching"
+          element={
+            <RequireAuth role="admin">
+              <MatchingConfigPage />
             </RequireAuth>
           }
         />

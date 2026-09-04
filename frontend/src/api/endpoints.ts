@@ -10,9 +10,11 @@ import type {
   DistrictRow,
   HealthResponse,
   IngestionReport,
+  Job,
   LoginResponse,
+  MatchingCalibration,
+  MatchingWeights,
   Page,
-  ProcessPendingResult,
   ReviewCaseItem,
   ReviewDecisionResponse,
   Role,
@@ -113,7 +115,7 @@ export const reviewApi = {
 export const statusApi = {
   recompute: (ubid: string) =>
     api.get<StatusResult>(`/status/${encodeURIComponent(ubid)}`).then((r) => r.data),
-  runAll: () => api.post("/status/run-all").then((r) => r.data),
+  runAll: () => api.post<Job>("/status/run-all").then((r) => r.data),
 };
 
 export interface AuditParams {
@@ -183,8 +185,21 @@ export const ingestApi = {
       .post<IngestionReport>("/ingest/csv", form)
       .then((r) => r.data);
   },
+  // Queues a background job over every unresolved record; poll it via jobsApi.
   processPending: () =>
-    api
-      .post<ProcessPendingResult>("/ingest/process-pending")
-      .then((r) => r.data),
+    api.post<Job>("/ingest/process-pending").then((r) => r.data),
+};
+
+export const jobsApi = {
+  list: (params: { job_type?: string; status?: string; limit?: number; offset?: number } = {}) =>
+    api.get<Page<Job>>("/jobs", { params }).then((r) => r.data),
+  get: (id: string) => api.get<Job>(`/jobs/${id}`).then((r) => r.data),
+};
+
+export const matchingApi = {
+  getWeights: () => api.get<MatchingWeights>("/matching/weights").then((r) => r.data),
+  updateWeights: (updates: Partial<Omit<MatchingWeights, "updated_by" | "updated_at">>) =>
+    api.put<MatchingWeights>("/matching/weights", updates).then((r) => r.data),
+  calibration: () =>
+    api.get<MatchingCalibration>("/matching/calibration").then((r) => r.data),
 };

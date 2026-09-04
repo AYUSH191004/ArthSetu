@@ -73,6 +73,10 @@ class IngestionReport:
     skipped_duplicates: int = 0
     errors: list[RowError] = field(default_factory=list)
     matching: MatchingTally | None = None
+    # Set when matching was deferred to a background job instead of running
+    # inline (see `run_matching_for_ids` / job_handlers.py).
+    job_id: str | None = None
+    new_record_ids: list = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -91,6 +95,7 @@ class IngestionReport:
                 if self.matching
                 else None
             ),
+            "job_id": self.job_id,
         }
 
 
@@ -218,17 +223,29 @@ def ingest_rows(
 
     db.commit()
 
+    report.new_record_ids = [str(rid) for rid in new_ids]
+
     if process and new_ids:
-        report.matching = MatchingTally()
-        for rid in new_ids:
-            try:
-                result = process_source_record(db, rid)
-                report.matching.add(result["decision"])
-            except Exception:  # noqa: BLE001
-                db.rollback()
-                report.matching.failed += 1
+        report.matching = run_matching_for_ids(db, new_ids)
 
     return report
+
+
+def run_matching_for_ids(db: Session, ids: Iterable) -> MatchingTally:
+    """Run the matcher over an explicit list of source_record ids.
+
+    Shared by the synchronous `ingest_rows(process=True)` path and the
+    CSV_MATCH background job handler.
+    """
+    tally = MatchingTally()
+    for rid in ids:
+        try:
+            result = process_source_record(db, rid)
+            tally.add(result["decision"])
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            tally.failed += 1
+    return tally
 
 
 def process_pending(db: Session, limit: int = 1000) -> dict[str, Any]:
@@ -245,14 +262,7 @@ def process_pending(db: Session, limit: int = 1000) -> dict[str, Any]:
         .all()
     )
 
-    tally = MatchingTally()
-    for (rid,) in pending:
-        try:
-            result = process_source_record(db, rid)
-            tally.add(result["decision"])
-        except Exception:  # noqa: BLE001
-            db.rollback()
-            tally.failed += 1
+    tally = run_matching_for_ids(db, [rid for (rid,) in pending])
 
     return {
         "processed": tally.auto_link + tally.review + tally.new_entity,

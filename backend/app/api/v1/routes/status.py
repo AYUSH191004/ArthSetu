@@ -2,15 +2,15 @@
 # FILE: backend/app/api/v1/routes/status.py
 # ============================================================
 
-from time import perf_counter
-
 from fastapi import APIRouter, Depends, HTTPException, status as http_status
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import require_admin
+from backend.app.api.deps import AdminUser, require_admin
+from backend.app.db.enums import JobTypeEnum
 from backend.app.db.session import get_db
 from backend.app.db.models.business_entity import BusinessEntity
-from backend.app.schemas import StatusResultResponse, StatusRunAllResponse
+from backend.app.schemas import JobOut, StatusResultResponse
+from backend.app.services import job_runner
 from backend.app.services.status_engine import infer_business_status
 
 router = APIRouter()
@@ -31,48 +31,18 @@ def get_status(ubid: str, db: Session = Depends(get_db)):
 
 @router.post(
     "/run-all",
-    response_model=StatusRunAllResponse,
-    status_code=http_status.HTTP_200_OK,
+    response_model=JobOut,
+    status_code=http_status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require_admin)],
 )
-def run_all_status(db: Session = Depends(get_db)):
-    """Batch-recompute status for every business (admin / nightly / demo)."""
+def run_all_status(admin: AdminUser, db: Session = Depends(get_db)):
+    """Queue a batch status recompute for every business (admin / nightly / demo).
 
-    started = perf_counter()
-    rows = db.query(BusinessEntity).all()
-
-    processed = failed = active = dormant = closed = 0
-    errors = []
-
-    for entity in rows:
-        try:
-            result = infer_business_status(db=db, business_entity_id=entity.id)
-            processed += 1
-            current = result["status"]
-            if current == "ACTIVE":
-                active += 1
-            elif current == "DORMANT":
-                dormant += 1
-            elif current == "CLOSED":
-                closed += 1
-        except Exception as exc:  # noqa: BLE001
-            db.rollback()
-            failed += 1
-            errors.append(
-                {
-                    "business_id": str(entity.id),
-                    "ubid": entity.ubid_code,
-                    "error": str(exc),
-                }
-            )
-
-    return StatusRunAllResponse(
-        message="Status recomputation completed",
-        processed=processed,
-        failed=failed,
-        active=active,
-        dormant=dormant,
-        closed=closed,
-        duration_seconds=round(perf_counter() - started, 2),
-        errors=errors[:10],
+    Recomputing status touches every business row, which can take a while on
+    a large dataset — this runs off the request thread. Poll the returned
+    job via GET /jobs/{id}.
+    """
+    job = job_runner.submit_job(
+        db, JobTypeEnum.STATUS_RUN_ALL, payload={}, created_by=admin.username
     )
+    return job_runner.to_dict(job)

@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { analyticsApi, dashboardApi, statusApi } from "@/api/endpoints";
@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/context/AuthContext";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { isJobTerminal, useJobPolling } from "@/hooks/useJobPolling";
 import { StatusBreakdown } from "@/components/dashboard/StatusBreakdown";
 import { TopDistricts } from "@/components/dashboard/TopDistricts";
 import { AuditFeed } from "@/components/AuditFeed";
@@ -35,15 +36,37 @@ export function DashboardPage() {
     queryFn: analyticsApi.districts,
   });
 
+  // Recompute-all runs as a background job (see status_run_all in
+  // Docs/API_CONTRACT.md) so it doesn't block the request — the button
+  // queues it, then this page polls for completion.
+  const [recomputeJobId, setRecomputeJobId] = useState<string | null>(null);
+  const recomputeJob = useJobPolling(recomputeJobId);
+
   const recompute = useMutation({
     mutationFn: statusApi.runAll,
-    onSuccess: (res: { processed?: number }) => {
-      notify("success", `Recomputed status for ${res.processed ?? "all"} businesses`);
-      queryClient.invalidateQueries();
+    onSuccess: (job) => {
+      setRecomputeJobId(job.id);
+      notify("success", "Status recompute queued");
     },
     onError: (e) =>
       notify("error", (e as unknown as ApiError)?.message ?? "Recompute failed"),
   });
+
+  useEffect(() => {
+    const job = recomputeJob.data;
+    if (!job || !isJobTerminal(job.status)) return;
+    if (job.status === "succeeded") {
+      const processed = (job.result as { processed?: number } | null)?.processed;
+      notify("success", `Recomputed status for ${processed ?? "all"} businesses`);
+      queryClient.invalidateQueries();
+    } else {
+      notify("error", job.error ?? "Status recompute failed");
+    }
+    setRecomputeJobId(null);
+  }, [recomputeJob.data, notify]);
+
+  const recomputeRunning =
+    recompute.isPending || (!!recomputeJobId && !isJobTerminal(recomputeJob.data?.status ?? "pending"));
 
   const d = dashboard.data;
   const counts: Record<EntityStatus, number> = {
@@ -63,7 +86,8 @@ export function DashboardPage() {
             <Button
               variant="secondary"
               size="sm"
-              loading={recompute.isPending}
+              loading={recomputeRunning}
+              disabled={recomputeRunning}
               onClick={() => recompute.mutate()}
             >
               <RefreshCw className="h-3.5 w-3.5" />

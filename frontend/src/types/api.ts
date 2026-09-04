@@ -231,6 +231,7 @@ export interface IngestionReport {
   skipped_duplicates: number;
   errors: { row: number; error: string }[];
   matching: MatchingTally | null;
+  job_id: string | null;
 }
 
 export interface ProcessPendingResult {
@@ -239,4 +240,59 @@ export interface ProcessPendingResult {
   review: number;
   new_entity: number;
   failed: number;
+}
+
+// --- Background jobs ----------------------------------------------------
+
+export type JobType = "status_run_all" | "process_pending" | "csv_match";
+export type JobStatus = "pending" | "running" | "succeeded" | "failed";
+
+export interface Job {
+  id: string;
+  job_type: JobType;
+  status: JobStatus;
+  payload: unknown;
+  result: unknown;
+  error: string | null;
+  created_by: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+// --- Matching configuration ---------------------------------------------
+
+export interface MatchingWeights {
+  gstin_weight: number;
+  pan_weight: number;
+  name_weight: number;
+  address_weight: number;
+  pin_weight: number;
+  pin_requires_name_sim: number;
+  auto_link_threshold: number;
+  review_threshold: number;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export interface ConfidenceBucket {
+  label: string;
+  total: number;
+  approved: number;
+  rejected: number;
+  pending: number;
+  approve_rate: number | null;
+}
+
+export interface SignalBreakdownRow {
+  signal: string;
+  approved: number;
+  rejected: number;
+}
+
+export interface MatchingCalibration {
+  weights: MatchingWeights;
+  buckets: ConfidenceBucket[];
+  signals: SignalBreakdownRow[];
+  sample_size: number;
 }

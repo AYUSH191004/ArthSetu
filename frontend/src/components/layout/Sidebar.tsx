@@ -4,8 +4,10 @@ import {
   Search,
   ClipboardCheck,
   History,
+  ListChecks,
   Map,
   Network,
+  SlidersHorizontal,
   UploadCloud,
   Users,
   X,
@@ -27,6 +29,8 @@ const nav: {
   { to: "/corrections", label: "Corrections", icon: History, role: "reviewer" },
   { to: "/districts", label: "District Analytics", icon: Map },
   { to: "/ingest", label: "Data Ingestion", icon: UploadCloud, role: "admin" },
+  { to: "/jobs", label: "Background Jobs", icon: ListChecks, role: "admin" },
+  { to: "/matching", label: "Matching Tuning", icon: SlidersHorizontal, role: "admin" },
   { to: "/users", label: "Users", icon: Users, role: "admin" },
 ];
 

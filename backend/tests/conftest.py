@@ -18,6 +18,9 @@ _TMP_DB.close()
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DB.name}"
 os.environ["SECRET_KEY"] = "test-secret-key-not-for-production"
 os.environ["ACCESS_TOKEN_EXPIRE_MINUTES"] = "60"
+# Background jobs run inline (no worker thread) so tests are deterministic —
+# a job's result is available the instant submit_job() returns.
+os.environ["JOBS_SYNC"] = "1"
 
 import bcrypt  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

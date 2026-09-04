@@ -6,29 +6,61 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status as http_status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import require_admin
+from backend.app.api.deps import AdminUser, require_admin
+from backend.app.db.enums import JobStatusEnum, JobTypeEnum
 from backend.app.db.session import get_db
 from backend.app.db.models.source_record import SourceRecord
 from backend.app.db.models.source_system import SourceSystem
 from backend.app.schemas import (
     IngestionReportOut,
     IngestRequest,
+    JobOut,
     PendingCountResponse,
-    ProcessPendingResponse,
     SourceSystemOut,
 )
-from backend.app.services import ingestion
+from backend.app.services import ingestion, job_runner
 
 router = APIRouter()
 
 DbSession = Annotated[Session, Depends(get_db)]
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB
+
+
+def _create_then_queue_matching(
+    db: DbSession,
+    admin: AdminUser,
+    source_system_code: str,
+    rows: list[dict],
+    process: bool,
+) -> ingestion.IngestionReport:
+    """Create records synchronously (fast), then hand matching off to a job.
+
+    Row creation stays on the request thread — it's cheap. Matching runs the
+    scoring engine per record, which is the slow part on a large batch, so
+    it's queued as a background job instead of blocking the upload response.
+    """
+    report = ingestion.ingest_rows(db, source_system_code, rows, process=False)
+
+    if process and report.new_record_ids:
+        job = job_runner.submit_job(
+            db,
+            JobTypeEnum.CSV_MATCH,
+            payload={"source_record_ids": report.new_record_ids},
+            created_by=admin.username,
+        )
+        report.job_id = str(job.id)
+        # In JOBS_SYNC mode the job has already finished by the time
+        # submit_job returns — surface its result inline like before.
+        if job.status == JobStatusEnum.SUCCEEDED and job.result:
+            report.matching = ingestion.MatchingTally(**job.result)
+
+    return report
 
 
 @router.get("/source-systems", response_model=list[SourceSystemOut])
@@ -74,6 +106,7 @@ def csv_template():
 )
 async def ingest_csv(
     db: DbSession,
+    admin: AdminUser,
     source_system_code: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
     process: Annotated[bool, Form()] = True,
@@ -89,7 +122,7 @@ async def ingest_csv(
         raise HTTPException(status_code=400, detail="No data rows found in CSV")
 
     try:
-        report = ingestion.ingest_rows(db, source_system_code, rows, process)
+        report = _create_then_queue_matching(db, admin, source_system_code, rows, process)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return report.as_dict()
@@ -100,7 +133,7 @@ async def ingest_csv(
     response_model=IngestionReportOut,
     dependencies=[Depends(require_admin)],
 )
-def ingest_records(body: IngestRequest, db: DbSession):
+def ingest_records(body: IngestRequest, db: DbSession, admin: AdminUser):
     rows = [
         {
             "external_id": r.external_id or "",
@@ -114,8 +147,8 @@ def ingest_records(body: IngestRequest, db: DbSession):
         for r in body.records
     ]
     try:
-        report = ingestion.ingest_rows(
-            db, body.source_system_code, rows, body.process
+        report = _create_then_queue_matching(
+            db, admin, body.source_system_code, rows, body.process
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -124,11 +157,17 @@ def ingest_records(body: IngestRequest, db: DbSession):
 
 @router.post(
     "/process-pending",
-    response_model=ProcessPendingResponse,
+    response_model=JobOut,
+    status_code=http_status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require_admin)],
 )
 def process_pending(
     db: DbSession,
+    admin: AdminUser,
     limit: int = Query(default=1000, ge=1, le=5000),
 ):
-    return ingestion.process_pending(db, limit=limit)
+    """Queue matching over every unresolved source record (runs off-thread)."""
+    job = job_runner.submit_job(
+        db, JobTypeEnum.PROCESS_PENDING, payload={"limit": limit}, created_by=admin.username
+    )
+    return job_runner.to_dict(job)

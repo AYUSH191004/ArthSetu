@@ -324,6 +324,7 @@ class IngestionReportOut(BaseModel):
     skipped_duplicates: int
     errors: List[RowError]
     matching: Optional[MatchingTallyOut] = None
+    job_id: Optional[str] = None
 
 
 class ProcessPendingResponse(BaseModel):
@@ -381,3 +382,81 @@ class CorrectionListResponse(BaseModel):
     limit: int
     offset: int
     items: List[CorrectionEntry]
+
+
+# ------------------------------------------------------------
+# Background jobs
+# ------------------------------------------------------------
+
+JobStatus = Literal["pending", "running", "succeeded", "failed"]
+JobType = Literal["status_run_all", "process_pending", "csv_match"]
+
+
+class JobOut(BaseModel):
+    id: str
+    job_type: JobType
+    status: JobStatus
+    payload: Optional[Any] = None
+    result: Optional[Any] = None
+    error: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+
+
+class JobListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: List[JobOut]
+
+
+# ------------------------------------------------------------
+# Matching configuration (reviewer-feedback calibration)
+# ------------------------------------------------------------
+
+class MatchingWeightsOut(BaseModel):
+    gstin_weight: float
+    pan_weight: float
+    name_weight: float
+    address_weight: float
+    pin_weight: float
+    pin_requires_name_sim: float
+    auto_link_threshold: float
+    review_threshold: float
+    updated_by: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
+class MatchingWeightsUpdate(BaseModel):
+    gstin_weight: Optional[float] = Field(default=None, ge=0, le=1)
+    pan_weight: Optional[float] = Field(default=None, ge=0, le=1)
+    name_weight: Optional[float] = Field(default=None, ge=0, le=1)
+    address_weight: Optional[float] = Field(default=None, ge=0, le=1)
+    pin_weight: Optional[float] = Field(default=None, ge=0, le=1)
+    pin_requires_name_sim: Optional[float] = Field(default=None, ge=0, le=1)
+    auto_link_threshold: Optional[float] = Field(default=None, ge=0, le=1)
+    review_threshold: Optional[float] = Field(default=None, ge=0, le=1)
+
+
+class ConfidenceBucket(BaseModel):
+    label: str
+    total: int
+    approved: int
+    rejected: int
+    pending: int
+    approve_rate: Optional[float] = None
+
+
+class SignalBreakdownRow(BaseModel):
+    signal: str
+    approved: int
+    rejected: int
+
+
+class MatchingCalibrationResponse(BaseModel):
+    weights: MatchingWeightsOut
+    buckets: List[ConfidenceBucket]
+    signals: List[SignalBreakdownRow]
+    sample_size: int

@@ -21,6 +21,10 @@ from backend.app.services.scoring import (
     pin_matches,
     similarity,
 )
+from backend.app.services.matching_config_service import (
+    MatchingWeights,
+    get_weights,
+)
 from backend.app.services.ubid_service import generate_ubid
 
 from backend.app.db.models.business_entity import BusinessEntity
@@ -37,29 +41,19 @@ from backend.app.db.enums import (
 )
 
 # ============================================================
-# THRESHOLDS
-# ============================================================
-
-AUTO_LINK_THRESHOLD = 0.92
-REVIEW_THRESHOLD = 0.70
-
-# ============================================================
-# WEIGHTS
+# THRESHOLDS & WEIGHTS
 #   GSTIN alone is definitive (unique government id).
 #   PAN alone is a strong anchor (same legal entity / proprietor).
 #   Name + address + PIN together corroborate enough for human review
 #   but never enough for an automatic link without an id anchor.
+#
+#   These used to be fixed module constants; they now live in the
+#   `matching_config` table (single row, defaults match the original
+#   values) so an admin can calibrate them from reviewer approve/reject
+#   feedback — see matching_config_service.py and GET /matching/calibration.
+#   A shared PIN only counts once the names are at least loosely related —
+#   a bare PIN covers thousands of businesses.
 # ============================================================
-
-GSTIN_WEIGHT = 0.60
-PAN_WEIGHT = 0.55
-NAME_WEIGHT = 0.42        # x fuzzy name score
-ADDRESS_WEIGHT = 0.28     # x fuzzy address score
-PIN_WEIGHT = 0.12         # exact 6-digit PIN match
-
-# A shared PIN only counts once the names are at least loosely related —
-# a bare PIN covers thousands of businesses.
-PIN_REQUIRES_NAME_SIM = 0.35
 
 # Filler tokens that make a poor blocking key.
 _NAME_STOPWORDS = {"M", "S", "MS", "MESSRS", "THE"}
@@ -157,6 +151,7 @@ def process_source_record(
         raise ValueError("SourceRecord not found")
 
     try:
+        weights = get_weights(db)
         candidates = _find_candidates(db, source_record)
 
         if not candidates:
@@ -164,9 +159,9 @@ def process_source_record(
             db.commit()
             return _to_dict(result)
 
-        best_entity, score, reasons = _best_candidate(source_record, candidates)
+        best_entity, score, reasons = _best_candidate(source_record, candidates, weights)
 
-        if score >= AUTO_LINK_THRESHOLD:
+        if score >= weights.auto_link_threshold:
             result = _auto_link(
                 db=db,
                 source_record=source_record,
@@ -175,7 +170,7 @@ def process_source_record(
                 reasons=reasons,
             )
 
-        elif score >= REVIEW_THRESHOLD:
+        elif score >= weights.review_threshold:
             result = _create_review_case(
                 db=db,
                 source_record=source_record,
@@ -247,6 +242,7 @@ def _find_candidates(
 def _best_candidate(
     source_record: SourceRecord,
     candidates: List[BusinessEntity],
+    weights: MatchingWeights,
 ) -> Tuple[BusinessEntity, float, List[str]]:
 
     best_score = -1.0
@@ -254,7 +250,7 @@ def _best_candidate(
     best_reasons: List[str] = []
 
     for entity in candidates:
-        score, reasons = _score_candidate(source_record, entity)
+        score, reasons = _score_candidate(source_record, entity, weights)
 
         if score > best_score:
             best_score = score
@@ -274,6 +270,7 @@ def _pan_from_gstin(gstin: Optional[str]) -> Optional[str]:
 def _score_candidate(
     source_record: SourceRecord,
     entity: BusinessEntity,
+    weights: MatchingWeights,
     ) -> Tuple[float, List[str]]:
 
     score = 0.0
@@ -288,30 +285,30 @@ def _score_candidate(
 
     # --- Strong identifiers ---------------------------------------------
     if src_gstin and entity.gstin and src_gstin == entity.gstin:
-        score += GSTIN_WEIGHT
+        score += weights.gstin_weight
         reasons.append("GSTIN exact match")
 
     entity_pan = entity.pan or _pan_from_gstin(entity.gstin)
     if src_pan and entity_pan and src_pan == entity_pan:
-        score += PAN_WEIGHT
+        score += weights.pan_weight
         reasons.append("PAN exact match")
 
     # --- Name --------------------------------------------------------------
     name_score = similarity(source_record.extracted_name, entity.legal_name)
-    score += NAME_WEIGHT * name_score
+    score += weights.name_weight * name_score
     reasons.append(f"Name similarity {round(name_score, 2)}")
 
     # --- Address --------------------------------------------------------
     if src_address and entity.address:
         addr_score = address_similarity(src_address, entity.address)
         if addr_score > 0:
-            score += ADDRESS_WEIGHT * addr_score
+            score += weights.address_weight * addr_score
             reasons.append(f"Address similarity {round(addr_score, 2)}")
 
     # --- PIN code (only meaningful alongside a plausible name) ---------
     if pin_matches(src_pin, entity.pin_code):
-        if name_score >= PIN_REQUIRES_NAME_SIM:
-            score += PIN_WEIGHT
+        if name_score >= weights.pin_requires_name_sim:
+            score += weights.pin_weight
             reasons.append(f"PIN code match ({normalize_pin(src_pin)})")
         else:
             reasons.append("PIN code match (ignored — names unrelated)")

@@ -16,6 +16,12 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
 
+    # Background jobs normally run on a worker thread pool. Tests (and any
+    # environment that wants deterministic, synchronous execution) set this
+    # to run jobs inline on the submitting thread instead.
+    JOBS_SYNC: bool = False
+    JOBS_MAX_WORKERS: int = 2
+
     # --- Auth -------------------------------------------------------------
     # MUST be overridden in any non-local environment. Generate with:
     #   python -c "import secrets; print(secrets.token_urlsafe(48))"

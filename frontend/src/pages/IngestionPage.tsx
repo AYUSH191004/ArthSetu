@@ -1,13 +1,14 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, RefreshCw, Upload } from "lucide-react";
 import { ingestApi } from "@/api/endpoints";
 import { queryClient } from "@/lib/queryClient";
 import type { ApiError } from "@/lib/api";
-import type { IngestionReport, ProcessPendingResult } from "@/types/api";
+import type { IngestionReport, MatchingTally } from "@/types/api";
 import { formatNumber } from "@/lib/format";
 import { useToast } from "@/components/Toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { isJobTerminal, useJobPolling } from "@/hooks/useJobPolling";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -38,7 +39,15 @@ export function IngestionPage() {
   const [system, setSystem] = useState("");
   const [runMatching, setRunMatching] = useState(true);
   const [report, setReport] = useState<IngestionReport | null>(null);
-  const [pendingResult, setPendingResult] = useState<ProcessPendingResult | null>(null);
+  const [pendingResult, setPendingResult] = useState<MatchingTally & { processed: number } | null>(null);
+
+  // Matching runs off the request thread as a background job (see
+  // Docs/API_CONTRACT.md#ingestion) — both flows below queue a job and
+  // poll it here instead of blocking on the response.
+  const [matchJobId, setMatchJobId] = useState<string | null>(null);
+  const matchJob = useJobPolling(matchJobId);
+  const [pendingJobId, setPendingJobId] = useState<string | null>(null);
+  const pendingJob = useJobPolling(pendingJobId);
 
   const systems = useQuery({
     queryKey: ["source-systems"],
@@ -67,22 +76,57 @@ export function IngestionPage() {
       setReport(r);
       notify("success", `${r.created} record${r.created === 1 ? "" : "s"} imported`);
       if (fileInput.current) fileInput.current.value = "";
+      if (r.job_id && !r.matching) setMatchJobId(r.job_id);
       refreshAll();
     },
     onError: (e) =>
       notify("error", (e as unknown as ApiError)?.message ?? "Import failed"),
   });
 
+  useEffect(() => {
+    const job = matchJob.data;
+    if (!job || !isJobTerminal(job.status)) return;
+    if (job.status === "succeeded" && job.result) {
+      const tally = job.result as MatchingTally;
+      setReport((prev) => (prev ? { ...prev, matching: tally } : prev));
+      notify("success", "Matching finished for the imported batch");
+    } else {
+      notify("error", job.error ?? "Matching failed");
+    }
+    setMatchJobId(null);
+    refreshAll();
+  }, [matchJob.data, notify]);
+
   const processPending = useMutation({
     mutationFn: ingestApi.processPending,
-    onSuccess: (r) => {
-      setPendingResult(r);
-      notify("success", `Processed ${r.processed} pending record${r.processed === 1 ? "" : "s"}`);
-      refreshAll();
+    onSuccess: (job) => {
+      setPendingJobId(job.id);
+      notify("success", "Matching queued for pending records");
     },
     onError: (e) =>
       notify("error", (e as unknown as ApiError)?.message ?? "Processing failed"),
   });
+
+  useEffect(() => {
+    const job = pendingJob.data;
+    if (!job || !isJobTerminal(job.status)) return;
+    if (job.status === "succeeded" && job.result) {
+      const result = job.result as MatchingTally & { processed: number };
+      setPendingResult(result);
+      notify(
+        "success",
+        `Processed ${result.processed} pending record${result.processed === 1 ? "" : "s"}`,
+      );
+    } else {
+      notify("error", job.error ?? "Processing failed");
+    }
+    setPendingJobId(null);
+    refreshAll();
+  }, [pendingJob.data, notify]);
+
+  const matchRunning = !!matchJobId && !isJobTerminal(matchJob.data?.status ?? "pending");
+  const pendingRunning =
+    processPending.isPending || (!!pendingJobId && !isJobTerminal(pendingJob.data?.status ?? "pending"));
 
   const systemOptions = [
     { value: "", label: "Select a source system…" },
@@ -116,12 +160,12 @@ export function IngestionPage() {
           <Button
             variant="secondary"
             size="sm"
-            loading={processPending.isPending}
-            disabled={!pending.data}
+            loading={pendingRunning}
+            disabled={!pending.data || pendingRunning}
             onClick={() => processPending.mutate()}
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            Run matching on pending
+            {pendingRunning ? "Matching…" : "Run matching on pending"}
           </Button>
         </CardBody>
         {pendingResult && (
@@ -206,11 +250,16 @@ export function IngestionPage() {
                   </span>
                 )}
               </div>
-              {report.matching && (
+              {report.matching ? (
                 <div className="mt-2">
                   <TallyRow tally={report.matching} />
                 </div>
-              )}
+              ) : report.job_id && matchRunning ? (
+                <div className="mt-2 flex items-center gap-1.5 text-[12px] text-ink-muted">
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  Matching in progress…
+                </div>
+              ) : null}
               {report.errors.length > 0 && (
                 <ul className="mt-2 space-y-0.5 text-[12px] text-danger">
                   {report.errors.slice(0, 10).map((e, i) => (

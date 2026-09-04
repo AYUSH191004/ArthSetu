@@ -49,6 +49,19 @@ class AuditActorEnum(str, enum.Enum):
     REVIEWER = "reviewer"
 
 
+class JobTypeEnum(str, enum.Enum):
+    STATUS_RUN_ALL = "status_run_all"
+    PROCESS_PENDING = "process_pending"
+    CSV_MATCH = "csv_match"
+
+
+class JobStatusEnum(str, enum.Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 class UserRole(str, enum.Enum):
     ADMIN = "admin"        # user management + engine triggers + everything below
     REVIEWER = "reviewer"  # review-queue decisions + everything below

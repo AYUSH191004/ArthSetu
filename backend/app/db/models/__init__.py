@@ -9,6 +9,8 @@ from backend.app.db.models.review_case import ReviewCase
 from backend.app.db.models.activity_event import ActivityEvent
 from backend.app.db.models.status_snapshot import StatusSnapshot
 from backend.app.db.models.audit_log import AuditLog
+from backend.app.db.models.job import Job
+from backend.app.db.models.matching_config import MatchingConfig
 
 __all__ = [
     "User",
@@ -20,4 +22,6 @@ __all__ = [
     "ActivityEvent",
     "StatusSnapshot",
     "AuditLog",
+    "Job",
+    "MatchingConfig",
 ]

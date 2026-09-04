@@ -317,7 +317,8 @@ Docs/
 
 ## Infrastructure
 
-- Docker-ready architecture
+- Docker + docker-compose (Postgres, API, nginx-served frontend)
+- In-process background job runner for batch/bulk operations
 - Modular backend services
 - REST APIs
 
@@ -382,6 +383,11 @@ React + TypeScript console (Vite + Tailwind, TanStack Query). Complete:
 - **Corrections** — split a wrongly-linked record, pin a lifecycle status, reassign an
   activity event; every correction is reversible from a history view
 - **District analytics** — stacked bars + sortable table with drill-down into search
+- **Background jobs** (admin) — batch status recompute and bulk matching now run off the
+  request thread on a worker pool; a Jobs page tracks pending/running/succeeded/failed
+- **Matching tuning** (admin) — the scoring weights and decision thresholds are live-editable
+  (no longer fixed constants), alongside a reviewer-feedback calibration view that buckets
+  review-case confidence against actual approve/reject outcomes
 
 ---
 
@@ -594,6 +600,15 @@ npm run dev                        # http://localhost:5173
 
 The dev server proxies `/api` to the backend, so start the API first. See
 [`frontend/README.md`](frontend/README.md) for details.
+
+## Docker
+
+```bash
+docker compose up --build
+docker compose exec backend python -m backend.seed_dev --reset   # once, after it's healthy
+```
+Runs Postgres + the API (`:8000`, migrations applied on start) + the
+frontend behind nginx (`:8080`). See [`Docs/API_CONTRACT.md`](Docs/API_CONTRACT.md#running-with-docker).
 
 ## Auth
 

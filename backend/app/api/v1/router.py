@@ -10,10 +10,14 @@ from backend.app.api.v1.routes import (
     dashboard,
     health,
     ingest,
+    jobs,
     matching,
     review,
     status,
 )
+
+# Registers job_runner handlers (status run-all, process-pending, csv match).
+from backend.app.services import job_handlers  # noqa: F401
 
 router = APIRouter()
 
@@ -44,5 +48,9 @@ router.include_router(
 # --- Admin only --------------------------------------------------------
 router.include_router(
     matching.router, prefix="/matching", tags=["Matching"],
+    dependencies=[Depends(require_admin)],
+)
+router.include_router(
+    jobs.router, prefix="/jobs", tags=["Jobs"],
     dependencies=[Depends(require_admin)],
 )
