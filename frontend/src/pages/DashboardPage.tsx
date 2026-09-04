@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/States";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/Toast";
+import { useAuth } from "@/context/AuthContext";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { StatusBreakdown } from "@/components/dashboard/StatusBreakdown";
 import { TopDistricts } from "@/components/dashboard/TopDistricts";
@@ -25,6 +26,7 @@ const ActivityTrendChart = lazy(
 export function DashboardPage() {
   useDocumentTitle("Dashboard");
   const { notify } = useToast();
+  const { can } = useAuth();
 
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: dashboardApi.get });
   const trends = useQuery({ queryKey: ["trends"], queryFn: analyticsApi.trends });
@@ -57,15 +59,17 @@ export function DashboardPage() {
         title="Executive Dashboard"
         description="System-wide view of business identity and activity intelligence."
         actions={
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={recompute.isPending}
-            onClick={() => recompute.mutate()}
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Recompute statuses
-          </Button>
+          can("admin") ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={recompute.isPending}
+              onClick={() => recompute.mutate()}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Recompute statuses
+            </Button>
+          ) : undefined
         }
       />
 

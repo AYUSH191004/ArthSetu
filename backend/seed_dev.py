@@ -28,14 +28,25 @@ from backend.app.db.models.entity_record_link import EntityRecordLink
 from backend.app.db.models.review_case import ReviewCase
 from backend.app.db.models.source_record import SourceRecord
 from backend.app.db.models.source_system import SourceSystem
+from backend.app.db.models.user import User
 from backend.app.db.enums import (
     AuditActorEnum,
     EntityStatusEnum,
     EventTypeEnum,
     LinkDecisionEnum,
     ReviewCaseStatusEnum,
+    UserRole,
 )
+from backend.app.core.security import hash_password
 from backend.app.services.status_engine import infer_business_status
+
+# username, full name, role, password
+DEMO_USERS = [
+    ("admin", "System Administrator", UserRole.ADMIN, "arthsetu-admin"),
+    ("reviewer", "Priya Menon", UserRole.REVIEWER, "arthsetu-review"),
+    ("reviewer2", "Rohit Sharma", UserRole.REVIEWER, "arthsetu-review"),
+    ("officer", "Anjali Rao", UserRole.VIEWER, "arthsetu-view"),
+]
 
 SEED = 42
 random.seed(SEED)
@@ -151,9 +162,32 @@ def reset() -> None:
     Base.metadata.create_all(bind=engine)
 
 
+def seed_users(db) -> None:
+    created = 0
+    for username, full_name, role, password in DEMO_USERS:
+        if db.query(User).filter(User.username == username).first():
+            continue
+        db.add(
+            User(
+                username=username,
+                full_name=full_name,
+                role=role,
+                hashed_password=hash_password(password),
+                is_active=True,
+            )
+        )
+        created += 1
+    db.commit()
+    print(f"[+] users            : {created} created ({len(DEMO_USERS)} total)")
+    for username, _fn, role, password in DEMO_USERS:
+        print(f"      {username:10s} / {password:16s} ({role.value})")
+
+
 def seed() -> None:
     db = SessionLocal()
     try:
+        seed_users(db)
+
         if db.query(BusinessEntity).count() > 0:
             print("[=] Database already has businesses; skipping. Use --reset.")
             return

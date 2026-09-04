@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { useToast } from "@/components/Toast";
+import { useAuth } from "@/context/AuthContext";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { AuditFeed } from "@/components/AuditFeed";
 
@@ -28,6 +29,7 @@ export function BusinessProfilePage() {
   const { ubid = "" } = useParams();
   const navigate = useNavigate();
   const { notify } = useToast();
+  const { can } = useAuth();
   const [statusResult, setStatusResult] = useState<StatusResult | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useQuery({
@@ -104,16 +106,18 @@ export function BusinessProfilePage() {
             </div>
           </div>
 
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={recompute.isPending}
-            onClick={() => recompute.mutate()}
-            disabled={isLoading}
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Recompute status
-          </Button>
+          {can("reviewer") && (
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={recompute.isPending}
+              onClick={() => recompute.mutate()}
+              disabled={isLoading}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Recompute status
+            </Button>
+          )}
         </div>
       </div>
 

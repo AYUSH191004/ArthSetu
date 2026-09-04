@@ -370,6 +370,7 @@ ArthSetu uses a normalized relational architecture.
 
 React + TypeScript console (Vite + Tailwind, TanStack Query). Complete:
 
+- **Authentication** — login, JWT session, route guards, role-gated UI, admin user management
 - **Executive dashboard** — KPIs, activity-trend chart, status breakdown, live audit feed
 - **Business search** — full-text + status/district filters, URL-synced, paginated
 - **Business profile** — identity, linked departmental records, matching evidence,
@@ -576,6 +577,8 @@ python -m uvicorn backend.app.main:app --reload
 - API: `http://localhost:8000`  ·  Swagger: `http://localhost:8000/docs`
 - DB defaults to `sqlite:///./arthsetu_dev.db`; set `DATABASE_URL` (e.g. Postgres)
   in `backend/.env` to override. Schema is managed by Alembic (`alembic upgrade head`).
+- **Set `SECRET_KEY` in `backend/.env` for any non-local run**
+  (`python -c "import secrets; print(secrets.token_urlsafe(48))"`).
 
 ## Frontend
 
@@ -587,6 +590,18 @@ npm run dev                        # http://localhost:5173
 
 The dev server proxies `/api` to the backend, so start the API first. See
 [`frontend/README.md`](frontend/README.md) for details.
+
+## Auth
+
+Every API call except `/health` and `/auth/login` needs a bearer token.
+Roles: **admin** > **reviewer** > **viewer** (see [`Docs/API_CONTRACT.md`](Docs/API_CONTRACT.md)).
+The seeder creates demo accounts:
+
+| Username | Password | Role |
+|---|---|---|
+| `admin` | `arthsetu-admin` | admin |
+| `reviewer` | `arthsetu-review` | reviewer |
+| `officer` | `arthsetu-view` | viewer |
 
 ---
 

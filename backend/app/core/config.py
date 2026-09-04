@@ -16,6 +16,17 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
 
+    # --- Auth -------------------------------------------------------------
+    # MUST be overridden in any non-local environment. Generate with:
+    #   python -c "import secrets; print(secrets.token_urlsafe(48))"
+    SECRET_KEY: str = "dev-insecure-change-me-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
+
+    # First-run bootstrap admin (created by the seeder / on empty user table).
+    BOOTSTRAP_ADMIN_USERNAME: str = "admin"
+    BOOTSTRAP_ADMIN_PASSWORD: str = "arthsetu-admin"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,

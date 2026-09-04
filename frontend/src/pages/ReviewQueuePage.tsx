@@ -1,19 +1,18 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Check, X } from "lucide-react";
+import { ArrowRight, Check, Lock, X } from "lucide-react";
 import { reviewApi } from "@/api/endpoints";
 import { queryClient } from "@/lib/queryClient";
 import type { ApiError } from "@/lib/api";
 import type { ReviewCaseItem } from "@/types/api";
-import { REVIEWERS, getReviewer, setReviewer } from "@/lib/reviewer";
+import { useAuth } from "@/context/AuthContext";
 import { useUrlFilters } from "@/hooks/useUrlFilters";
 import { formatNumber, relativeTime } from "@/lib/format";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Select } from "@/components/ui/Field";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { Pagination } from "@/components/ui/Pagination";
@@ -41,10 +40,11 @@ function confidenceTone(c: number | null): "ok" | "warn" | "danger" {
 export function ReviewQueuePage() {
   useDocumentTitle("Review Queue");
   const { notify } = useToast();
+  const { can } = useAuth();
+  const canReview = can("reviewer");
   const { values, offset, setFilter, setOffset } = useUrlFilters(FILTER_KEYS);
   const tab = values.status || "open"; // "open" | "approved" | "rejected" | "all"
   const apiStatus = tab === "all" ? undefined : tab;
-  const [reviewer, setReviewerState] = useState(getReviewer());
 
   const openCount = useQuery({
     queryKey: ["reviews", "count", "open"],
@@ -96,18 +96,12 @@ export function ReviewQueuePage() {
         title="Review Queue"
         description="Human-in-the-loop review of uncertain record links."
         actions={
-          <label className="flex items-center gap-2 text-[13px] text-ink-muted">
-            Acting as
-            <Select
-              options={REVIEWERS.map((r) => ({ value: r, label: r }))}
-              value={reviewer}
-              onChange={(e) => {
-                setReviewer(e.target.value);
-                setReviewerState(e.target.value);
-              }}
-              className="w-44"
-            />
-          </label>
+          !canReview ? (
+            <span className="flex items-center gap-1.5 rounded-md bg-surface-muted px-2.5 py-1 text-[12px] text-ink-muted">
+              <Lock className="h-3.5 w-3.5" />
+              Read-only — reviewer role required to act
+            </span>
+          ) : undefined
         }
       />
 
@@ -172,6 +166,7 @@ export function ReviewQueuePage() {
             <ReviewCard
               key={c.review_id}
               c={c}
+              canReview={canReview}
               pending={pending[c.review_id]}
               onApprove={() =>
                 decide.mutate({ id: c.review_id, action: "approve" })
@@ -202,11 +197,13 @@ export function ReviewQueuePage() {
 
 function ReviewCard({
   c,
+  canReview,
   pending,
   onApprove,
   onReject,
 }: {
   c: ReviewCaseItem;
+  canReview: boolean;
   pending?: "approve" | "reject";
   onApprove: () => void;
   onReject: () => void;
@@ -279,7 +276,7 @@ function ReviewCard({
           </ul>
         )}
 
-        {isOpen ? (
+        {isOpen && canReview ? (
           <div className="flex gap-2 pt-1">
             <Button
               size="sm"
@@ -301,6 +298,8 @@ function ReviewCard({
               Reject
             </Button>
           </div>
+        ) : isOpen ? (
+          <p className="text-[12px] text-ink-subtle">Awaiting reviewer decision.</p>
         ) : (
           <p className="text-[12px] text-ink-subtle">
             {c.status === "approved" ? "Approved" : "Rejected"}

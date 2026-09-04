@@ -6,9 +6,57 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+# ------------------------------------------------------------
+# Auth
+# ------------------------------------------------------------
+
+Role = Literal["admin", "reviewer", "viewer"]
+
+
+class UserOut(BaseModel):
+    id: str
+    username: str
+    full_name: str
+    email: Optional[str] = None
+    role: Role
+    is_active: bool
+    created_at: Optional[datetime] = None
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserOut
+
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9._-]+$")
+    full_name: str = Field(min_length=1, max_length=120)
+    email: Optional[str] = None
+    role: Role = "viewer"
+    password: str = Field(min_length=8, max_length=128)
+
+
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    email: Optional[str] = None
+    role: Optional[Role] = None
+    is_active: Optional[bool] = None
+
+
+class PasswordResetRequest(BaseModel):
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 # ------------------------------------------------------------
@@ -154,10 +202,6 @@ class ReviewListResponse(BaseModel):
     limit: int
     offset: int
     items: List[ReviewCaseItem]
-
-
-class ReviewDecisionRequest(BaseModel):
-    reviewer_id: Optional[str] = None
 
 
 class ReviewDecisionResponse(BaseModel):

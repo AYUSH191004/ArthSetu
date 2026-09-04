@@ -47,3 +47,15 @@ class AuditActorEnum(str, enum.Enum):
     SYSTEM = "system"
     USER = "user"
     REVIEWER = "reviewer"
+
+
+class UserRole(str, enum.Enum):
+    ADMIN = "admin"        # user management + engine triggers + everything below
+    REVIEWER = "reviewer"  # review-queue decisions + everything below
+    VIEWER = "viewer"      # read-only access
+
+    def rank(self) -> int:
+        return {"viewer": 0, "reviewer": 1, "admin": 2}[self.value]
+
+    def satisfies(self, required: "UserRole") -> bool:
+        return self.rank() >= required.rank()

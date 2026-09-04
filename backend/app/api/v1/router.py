@@ -1,8 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from backend.app.api.deps import get_current_user, require_admin, require_reviewer
 from backend.app.api.v1.routes import (
     analytics,
     audit,
+    auth,
     business_public,
     dashboard,
     health,
@@ -13,11 +15,26 @@ from backend.app.api.v1.routes import (
 
 router = APIRouter()
 
+# --- Public ---------------------------------------------------------------
 router.include_router(health.router, tags=["Health"])
-router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
-router.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
-router.include_router(business_public.router, prefix="/business", tags=["Business"])
-router.include_router(review.router, prefix="/reviews", tags=["Review"])
-router.include_router(matching.router, prefix="/matching", tags=["Matching"])
-router.include_router(status.router, prefix="/status", tags=["Status"])
-router.include_router(audit.router, prefix="/audit", tags=["Audit"])
+router.include_router(auth.router, prefix="/auth", tags=["Auth"])
+
+# --- Authenticated (any active user) ------------------------------------
+_auth = [Depends(get_current_user)]
+router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"], dependencies=_auth)
+router.include_router(analytics.router, prefix="/analytics", tags=["Analytics"], dependencies=_auth)
+router.include_router(business_public.router, prefix="/business", tags=["Business"], dependencies=_auth)
+router.include_router(audit.router, prefix="/audit", tags=["Audit"], dependencies=_auth)
+router.include_router(review.router, prefix="/reviews", tags=["Review"], dependencies=_auth)
+
+# --- Reviewer or above --------------------------------------------------
+router.include_router(
+    status.router, prefix="/status", tags=["Status"],
+    dependencies=[Depends(require_reviewer)],
+)
+
+# --- Admin only --------------------------------------------------------
+router.include_router(
+    matching.router, prefix="/matching", tags=["Matching"],
+    dependencies=[Depends(require_admin)],
+)

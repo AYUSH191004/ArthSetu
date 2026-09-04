@@ -30,15 +30,21 @@ For a deployed build, set `VITE_API_BASE_URL` to the API origin + prefix
 ```
 src/
 ├── api/endpoints.ts     typed API client (one layer, matches Docs/API_CONTRACT.md)
-├── lib/                 axios instance, query client, formatters, cn()
+├── context/AuthContext  useAuth(): user, login, logout, can(role)
+├── lib/                 axios instance (+ bearer token), query client, auth storage, formatters
 ├── types/api.ts         response types mirrored from the contract
 ├── components/
 │   ├── ui/              Button, Card, Badge, Table, Field, StatCard, States, …
-│   ├── layout/          AppShell, Sidebar, Topbar
+│   ├── layout/          AppShell, Sidebar, Topbar (user menu)
+│   ├── RequireAuth.tsx  route guard (+ optional role)
 │   ├── Toast.tsx        toast provider + useToast()
 │   └── ErrorBoundary.tsx
-└── pages/               one file per route
+└── pages/               one file per route (LoginPage, UsersPage, …)
 ```
+
+Auth: `AuthContext` hydrates from `/auth/me` on load; the axios interceptor
+attaches the bearer token and redirects to `/login` on `401`. `can("reviewer")`
+etc. gate role-specific actions. `RequireAuth` guards the routes.
 
 Data fetching goes through TanStack Query; components never call axios directly.
 Design tokens live as CSS variables in `src/index.css` and are surfaced to

@@ -1,5 +1,24 @@
 // Mirrors Docs/API_CONTRACT.md — keep in sync with the backend.
 
+export type Role = "admin" | "reviewer" | "viewer";
+
+export interface User {
+  id: string;
+  username: string;
+  full_name: string;
+  email: string | null;
+  role: Role;
+  is_active: boolean;
+  created_at: string | null;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user: User;
+}
+
 export interface HealthResponse {
   status: string;
   service: string;

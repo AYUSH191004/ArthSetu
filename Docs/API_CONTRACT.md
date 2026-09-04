@@ -7,11 +7,50 @@ Interactive docs: `http://localhost:8000/docs`
 All enum values are **lower_snake_case** strings (`active`, `dormant`, `closed`,
 `unknown`, `open`, `approved`, `rejected`, `auto_link`, `review`, `manual`).
 
+## Authentication
+
+Every endpoint **except `GET /health` and `POST /auth/login`** requires a
+`Authorization: Bearer <token>` header. Missing/expired token → `401`;
+insufficient role → `403`.
+
+Roles (each includes the ones below it): **admin** > **reviewer** > **viewer**.
+
+| Capability | Minimum role |
+|---|---|
+| Read dashboard / search / profiles / analytics / audit | viewer |
+| Recompute a business status (`GET /status/{ubid}`) | reviewer |
+| Approve / reject a review case | reviewer |
+| Batch status recompute (`POST /status/run-all`) | admin |
+| Trigger matching (`POST /matching/process/...`) | admin |
+| User management (`/auth/users*`) | admin |
+
+`POST /api/v1/auth/login` — form-encoded (`application/x-www-form-urlencoded`):
+```
+username=admin&password=...
+```
+```json
+{ "access_token": "eyJ...", "token_type": "bearer", "expires_in": 28800,
+  "user": { "id": "...", "username": "admin", "full_name": "System Administrator",
+            "email": null, "role": "admin", "is_active": true, "created_at": "..." } }
+```
+
+`GET /api/v1/auth/me` → the `user` object above.
+`POST /api/v1/auth/change-password` → `{ "current_password": "...", "new_password": "..." }` → `204`.
+
+**Admin only:**
+`GET /api/v1/auth/users` → `[UserOut, ...]`
+`POST /api/v1/auth/users` → `{ username, full_name, email?, role, password }` → `201 UserOut`
+`PATCH /api/v1/auth/users/{id}` → `{ full_name?, email?, role?, is_active? }` → `UserOut`
+`POST /api/v1/auth/users/{id}/reset-password` → `{ "new_password": "..." }` → `UserOut`
+
+Seeded demo accounts: `admin` / `arthsetu-admin`, `reviewer` / `arthsetu-review`,
+`reviewer2` / `arthsetu-review`, `officer` / `arthsetu-view`.
+
 ---
 
 ## Health
 
-`GET /api/v1/health`
+`GET /api/v1/health`  (public)
 ```json
 { "status": "ok", "service": "ArthSetu", "version": "1.0.0",
   "environment": "development", "database": "connected" }
@@ -77,9 +116,9 @@ All enum values are **lower_snake_case** strings (`active`, `dormant`, `closed`,
     "reviewer_id": null, "created_at": "2026-09-04T08:29:16Z", "decided_at": null }] }
 ```
 
-`POST /api/v1/reviews/{review_id}/approve`
-`POST /api/v1/reviews/{review_id}/reject`
-- Optional body `{ "reviewer_id": "reviewer_krishna" }` or header `X-Reviewer-Id`.
+`POST /api/v1/reviews/{review_id}/approve`  (reviewer role)
+`POST /api/v1/reviews/{review_id}/reject`  (reviewer role)
+- No body. The reviewer is taken from the bearer token and recorded in the audit trail.
 - Approve confirms the proposed link (creates/promotes an `entity_record_link`,
   decision `manual`) and writes an audit row. Reject leaves the record separate.
 ```json

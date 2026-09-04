@@ -7,6 +7,7 @@ from time import perf_counter
 from fastapi import APIRouter, Depends, HTTPException, status as http_status
 from sqlalchemy.orm import Session
 
+from backend.app.api.deps import require_admin
 from backend.app.db.session import get_db
 from backend.app.db.models.business_entity import BusinessEntity
 from backend.app.schemas import StatusResultResponse, StatusRunAllResponse
@@ -32,6 +33,7 @@ def get_status(ubid: str, db: Session = Depends(get_db)):
     "/run-all",
     response_model=StatusRunAllResponse,
     status_code=http_status.HTTP_200_OK,
+    dependencies=[Depends(require_admin)],
 )
 def run_all_status(db: Session = Depends(get_db)):
     """Batch-recompute status for every business (admin / nightly / demo)."""

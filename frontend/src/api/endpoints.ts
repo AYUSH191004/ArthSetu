@@ -7,12 +7,53 @@ import type {
   DashboardResponse,
   DistrictRow,
   HealthResponse,
+  LoginResponse,
   Page,
   ReviewCaseItem,
   ReviewDecisionResponse,
+  Role,
   StatusResult,
   TrendPoint,
+  User,
 } from "@/types/api";
+
+export const authApi = {
+  login: (username: string, password: string) => {
+    const form = new URLSearchParams({ username, password });
+    return api
+      .post<LoginResponse>("/auth/login", form, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      })
+      .then((r) => r.data);
+  },
+  me: () => api.get<User>("/auth/me").then((r) => r.data),
+  changePassword: (current_password: string, new_password: string) =>
+    api
+      .post("/auth/change-password", { current_password, new_password })
+      .then(() => undefined),
+
+  listUsers: () => api.get<User[]>("/auth/users").then((r) => r.data),
+  createUser: (body: {
+    username: string;
+    full_name: string;
+    email?: string;
+    role: Role;
+    password: string;
+  }) => api.post<User>("/auth/users", body).then((r) => r.data),
+  updateUser: (
+    id: string,
+    body: Partial<{
+      full_name: string;
+      email: string | null;
+      role: Role;
+      is_active: boolean;
+    }>,
+  ) => api.patch<User>(`/auth/users/${id}`, body).then((r) => r.data),
+  resetPassword: (id: string, new_password: string) =>
+    api
+      .post<User>(`/auth/users/${id}/reset-password`, { new_password })
+      .then((r) => r.data),
+};
 
 export const healthApi = {
   get: () => api.get<HealthResponse>("/health").then((r) => r.data),

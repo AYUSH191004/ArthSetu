@@ -4,19 +4,18 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from backend.app.api.deps import ReviewerUser
 from backend.app.db.session import get_db
 from backend.app.db.models.review_case import ReviewCase
 from backend.app.db.models.business_entity import BusinessEntity
 from backend.app.db.models.source_record import SourceRecord
 from backend.app.db.models.source_system import SourceSystem
-from backend.app.db.enums import ReviewCaseStatusEnum
 from backend.app.schemas import (
     ReviewCaseItem,
-    ReviewDecisionRequest,
     ReviewDecisionResponse,
     ReviewListResponse,
 )
@@ -30,17 +29,6 @@ router = APIRouter()
 
 def _enum_value(value) -> str:
     return value.value if hasattr(value, "value") else str(value)
-
-
-def _resolve_reviewer(
-    body: ReviewDecisionRequest | None,
-    header_id: str | None,
-) -> str:
-    if body and body.reviewer_id:
-        return body.reviewer_id
-    if header_id:
-        return header_id
-    return "reviewer_demo"
 
 
 @router.get("", response_model=ReviewListResponse)
@@ -122,15 +110,12 @@ def list_review_cases(
 @router.post("/{review_id}/approve", response_model=ReviewDecisionResponse)
 def approve_review(
     review_id: str,
-    body: ReviewDecisionRequest | None = Body(default=None),
-    x_reviewer_id: str | None = Header(default=None),
+    reviewer: ReviewerUser,
     db: Session = Depends(get_db),
 ):
     try:
         return approve_review_case(
-            db=db,
-            review_id=review_id,
-            reviewer_id=_resolve_reviewer(body, x_reviewer_id),
+            db=db, review_id=review_id, reviewer_id=reviewer.username
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -139,15 +124,12 @@ def approve_review(
 @router.post("/{review_id}/reject", response_model=ReviewDecisionResponse)
 def reject_review(
     review_id: str,
-    body: ReviewDecisionRequest | None = Body(default=None),
-    x_reviewer_id: str | None = Header(default=None),
+    reviewer: ReviewerUser,
     db: Session = Depends(get_db),
 ):
     try:
         return reject_review_case(
-            db=db,
-            review_id=review_id,
-            reviewer_id=_resolve_reviewer(body, x_reviewer_id),
+            db=db, review_id=review_id, reviewer_id=reviewer.username
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

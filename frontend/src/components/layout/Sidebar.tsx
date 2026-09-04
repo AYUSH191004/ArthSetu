@@ -5,15 +5,25 @@ import {
   ClipboardCheck,
   Map,
   Network,
+  Users,
   X,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import type { Role } from "@/types/api";
 import { cn } from "@/lib/cn";
 
-const nav = [
+const nav: {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  end?: boolean;
+  role?: Role;
+}[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/businesses", label: "Business Search", icon: Search },
   { to: "/reviews", label: "Review Queue", icon: ClipboardCheck },
   { to: "/districts", label: "District Analytics", icon: Map },
+  { to: "/users", label: "Users", icon: Users, role: "admin" },
 ];
 
 export function Sidebar({
@@ -23,6 +33,9 @@ export function Sidebar({
   open: boolean;
   onClose: () => void;
 }) {
+  const { can } = useAuth();
+  const items = nav.filter((n) => !n.role || can(n.role));
+
   return (
     <>
       {/* backdrop (mobile only) */}
@@ -60,7 +73,7 @@ export function Sidebar({
         </div>
 
         <nav className="flex-1 space-y-0.5 p-2">
-          {nav.map(({ to, label, icon: Icon, end }) => (
+          {items.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
