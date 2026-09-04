@@ -603,6 +603,20 @@ The seeder creates demo accounts:
 | `reviewer` | `arthsetu-review` | reviewer |
 | `officer` | `arthsetu-view` | viewer |
 
+## Tests
+
+```bash
+python -m pytest                    # backend — from the repo root
+cd frontend && npm run test         # frontend (Vitest)
+```
+
+Backend covers the scoring/status/matching engines, JWT + password hashing, and
+the authenticated API (roles, review flow, endpoint contracts). Frontend covers
+the formatters, audit descriptions, and the auth context / route guard.
+
+GitHub Actions (`.github/workflows/ci.yml`) runs both suites plus
+`alembic upgrade head`, `tsc --noEmit`, and `vite build` on every push and PR.
+
 ---
 
 # Evaluation Criteria Alignment

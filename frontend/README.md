@@ -24,6 +24,11 @@ For a deployed build, set `VITE_API_BASE_URL` to the API origin + prefix
 | `npm run build` | Production build to `dist/` |
 | `npm run preview` | Serve the production build |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run test` | Vitest (run once) |
+| `npm run test:watch` | Vitest in watch mode |
+
+Tests live next to the code they cover (`*.test.ts` / `*.test.tsx`); jsdom +
+Testing Library, config in `vite.config.ts`, setup in `src/test/setup.ts`.
 
 ## Layout
 

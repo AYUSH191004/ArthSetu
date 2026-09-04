@@ -38,9 +38,10 @@ const ACRONYMS = new Set(["gst", "pan", "gstin", "ubid", "id", "kw"]);
 export function titleCase(value: string) {
   return value
     .replace(/[_-]+/g, " ")
+    .toLowerCase()
     .split(" ")
     .map((word) =>
-      ACRONYMS.has(word.toLowerCase())
+      ACRONYMS.has(word)
         ? word.toUpperCase()
         : word.charAt(0).toUpperCase() + word.slice(1),
     )
