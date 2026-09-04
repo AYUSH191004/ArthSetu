@@ -121,6 +121,7 @@ class BusinessSearchItem(BaseModel):
     business_name: str
     status: str
     district: Optional[str] = None
+    pin_code: Optional[str] = None
     pan: Optional[str] = None
     gstin: Optional[str] = None
 
@@ -145,6 +146,8 @@ class LinkedRecord(BaseModel):
     department: Optional[str] = None
     external_id: Optional[str] = None
     extracted_name: Optional[str] = None
+    extracted_address: Optional[str] = None
+    extracted_pin: Optional[str] = None
     confidence: Optional[float] = None
     decision: Optional[str] = None
 
@@ -167,6 +170,8 @@ class BusinessProfileResponse(BaseModel):
     status: str
     pan: Optional[str] = None
     gstin: Optional[str] = None
+    address: Optional[str] = None
+    pin_code: Optional[str] = None
     district: Optional[str] = None
     sector: Optional[str] = None
     linked_records_count: int

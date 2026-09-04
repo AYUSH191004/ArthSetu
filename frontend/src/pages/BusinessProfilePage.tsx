@@ -177,12 +177,16 @@ function IdentitySection({ data, loading }: { data?: BusinessProfile; loading: b
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
             <Field label="PAN" value={data?.pan} mono />
             <Field label="GSTIN" value={data?.gstin} mono />
+            <Field label="PIN code" value={data?.pin_code} mono />
             <Field label="District" value={data?.district} />
             <Field label="Sector" value={data?.sector} />
             <Field
               label="Lifecycle status"
               value={data ? statusMeta(data.status).label : undefined}
             />
+            <div className="col-span-2 sm:col-span-3">
+              <Field label="Registered address" value={data?.address} />
+            </div>
             <Field
               label="Linked records"
               value={data ? String(data.linked_records_count) : undefined}
@@ -229,11 +233,20 @@ function LinkedRecordsSection({ data, loading }: { data?: BusinessProfile; loadi
                     </div>
                   </Td>
                   <Td>
-                    <span className="text-ink">{r.extracted_name ?? "—"}</span>
-                    {r.external_id && (
-                      <span className="ml-1.5 font-mono text-[11px] text-ink-subtle">
-                        #{r.external_id}
-                      </span>
+                    <div>
+                      <span className="text-ink">{r.extracted_name ?? "—"}</span>
+                      {r.external_id && (
+                        <span className="ml-1.5 font-mono text-[11px] text-ink-subtle">
+                          #{r.external_id}
+                        </span>
+                      )}
+                    </div>
+                    {(r.extracted_address || r.extracted_pin) && (
+                      <div className="text-[12px] text-ink-subtle">
+                        {[r.extracted_address, r.extracted_pin]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </div>
                     )}
                   </Td>
                   <Td className="tabular-nums text-ink-muted">

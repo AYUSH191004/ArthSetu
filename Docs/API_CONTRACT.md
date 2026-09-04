@@ -79,25 +79,28 @@ Seeded demo accounts: `admin` / `arthsetu-admin`, `reviewer` / `arthsetu-review`
 
 ## Business
 
-`GET /api/v1/business/search?q=&status=&district=&limit=25&offset=0`
+`GET /api/v1/business/search?q=&status=&district=&pin=&limit=25&offset=0`
+(`q` also matches address text; `pin` is an exact 6-digit filter)
 ```json
 { "total": 12, "limit": 25, "offset": 0,
   "items": [{ "ubid": "UBID000019", "business_name": "Singh Auto Works",
               "status": "active", "district": "Mandi Gobindgarh",
-              "pan": "FKBJZ2744X", "gstin": null }] }
+              "pin_code": "147301", "pan": "FKBJZ2744X", "gstin": null }] }
 ```
 
 `GET /api/v1/business/{ubid}`  (404 if unknown)
 ```json
 { "ubid": "UBID000019", "business_name": "Singh Auto Works",
   "status": "active", "pan": "...", "gstin": null,
+  "address": "Plot 42, Focal Point 3, Ludhiana, Punjab", "pin_code": "141001",
   "district": "Mandi Gobindgarh", "sector": "Restaurant",
   "linked_records_count": 4,
   "linked_records": [{ "link_id": "...", "source_record_id": "...",
     "source_system": "Commercial Consumer Ledger", "department": "Electricity Board",
     "external_id": "85c45579-303", "extracted_name": "Singh Auto Wrks",
+    "extracted_address": "SINGH AUTO WRKS FOCAL POINT LUDHIANA", "extracted_pin": "141001",
     "confidence": 0.84, "decision": "review" }],
-  "matching_evidence": [{ "signal": "Best link confidence", "value": "84%" }],
+  "matching_evidence": [{ "signal": "Address similarity 0.9", "value": "Address similarity 0.9" }],
   "timeline": [{ "date": "2026-08-22T08:29:15Z", "event": "power_usage", "score": 0.85 }],
   "status_history": [{ "date": "2026-09-04T08:29:16Z", "status": "active", "confidence": 0.735 }] }
 ```
@@ -139,9 +142,23 @@ Seeded demo accounts: `admin` / `arthsetu-admin`, `reviewer` / `arthsetu-review`
 
 `POST /api/v1/matching/process/{source_record_id}`  (404 on bad id)
 ```json
-{ "decision": "REVIEW", "confidence": 0.73,
-  "business_entity_id": "...", "reasons": ["PAN exact match", "Name similarity 0.9"] }
+{ "decision": "REVIEW", "confidence": 0.73, "business_entity_id": "...",
+  "reasons": ["Name similarity 0.98", "Address similarity 0.9", "PIN code match (141001)"] }
 ```
+
+Signals & weights (score is capped at 1.0):
+
+| Signal | Weight | Notes |
+|---|---|---|
+| GSTIN exact | 0.60 | unique government id — definitive on its own |
+| PAN exact | 0.55 | derived from GSTIN when the PAN field is blank |
+| Name similarity | 0.42 × score | token-sort fuzzy ratio |
+| Address similarity | 0.28 × score | token-set ratio, filler words removed |
+| PIN code exact | 0.12 | only counts when name similarity ≥ 0.35 |
+
+`decision` is `AUTO_LINK` at ≥ 0.92, `REVIEW` at ≥ 0.70, otherwise `NEW_ENTITY`.
+A strong name + address + PIN match reaches `REVIEW` but never `AUTO_LINK`
+without an id anchor.
 
 ## Audit
 

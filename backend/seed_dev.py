@@ -22,7 +22,6 @@ from backend.app.db.base import Base
 from backend.app.db.session import SessionLocal, engine
 from backend.app.db import models  # noqa: F401  (register tables)
 from backend.app.db.models.activity_event import ActivityEvent
-from backend.app.db.models.audit_log import AuditLog
 from backend.app.db.models.business_entity import BusinessEntity
 from backend.app.db.models.entity_record_link import EntityRecordLink
 from backend.app.db.models.review_case import ReviewCase
@@ -30,14 +29,14 @@ from backend.app.db.models.source_record import SourceRecord
 from backend.app.db.models.source_system import SourceSystem
 from backend.app.db.models.user import User
 from backend.app.db.enums import (
-    AuditActorEnum,
     EntityStatusEnum,
     EventTypeEnum,
-    LinkDecisionEnum,
     ReviewCaseStatusEnum,
     UserRole,
 )
 from backend.app.core.security import hash_password
+from backend.app.services.matching_engine import process_source_record
+from backend.app.services.scoring import normalize_address
 from backend.app.services.status_engine import infer_business_status
 
 # username, full name, role, password
@@ -98,6 +97,47 @@ def _noisy(name: str) -> str:
         name.replace("Works", "Wrks"), name.replace("Industries", "Inds"),
         name,
     ])
+
+
+AREAS = [
+    "Industrial Area Phase", "Focal Point", "GT Road", "Model Town",
+    "Civil Lines", "Grain Market", "Mall Road", "Adarsh Nagar",
+    "Guru Nanak Colony", "Sabzi Mandi",
+]
+DISTRICT_PINS = {
+    "Patiala": "147001", "Ludhiana": "141001", "Mohali": "160055",
+    "Amritsar": "143001", "Bathinda": "151001", "Jalandhar": "144001",
+    "Rajpura": "140401", "Mandi Gobindgarh": "147301",
+}
+
+
+def _address(district: str) -> str:
+    return (
+        f"Plot {random.randint(1, 480)}, {random.choice(AREAS)} "
+        f"{random.randint(1, 8)}, {district}, Punjab"
+    )
+
+
+def _noisy_address(address: str) -> str:
+    """A departmental transcription of the same address."""
+    variants = [
+        address,
+        address.upper(),
+        address.replace("Plot", "Shop").replace("Phase", "Ph"),
+        address.split(",")[0] + ", " + address.split(",")[-2].strip(),  # drop area
+        address.replace(", Punjab", ""),
+    ]
+    return random.choice(variants)
+
+
+def _noisy_pin(pin: str) -> str:
+    # occasionally a digit-transposed / partial PIN
+    roll = random.random()
+    if roll < 0.75:
+        return pin
+    if roll < 0.9 and len(pin) == 6:
+        return pin[:5] + str((int(pin[5]) + 1) % 10)  # last-digit typo
+    return ""  # missing on this record
 
 
 ARCHETYPES = ["active"] * 62 + ["dormant"] * 25 + ["closed"] * 13
@@ -201,6 +241,8 @@ def seed() -> None:
         businesses: list[BusinessEntity] = []
         for i in range(1, TOTAL_BUSINESSES + 1):
             name = f"{random.choice(PREFIXES)} {random.choice(SUFFIXES)}"
+            district = random.choice(DISTRICTS)
+            address = _address(district)
             has_pan = random.random() < 0.75
             pan = _pan() if has_pan else None
             gstin = _gstin(pan) if pan and random.random() < 0.6 else None
@@ -210,7 +252,10 @@ def seed() -> None:
                 normalized_name=_normalize(name),
                 pan=pan,
                 gstin=gstin,
-                district=random.choice(DISTRICTS),
+                address=address,
+                normalized_address=normalize_address(address),
+                pin_code=DISTRICT_PINS[district],
+                district=district,
                 sector=random.choice(SECTORS),
                 status=EntityStatusEnum.UNKNOWN,
             )
@@ -218,7 +263,8 @@ def seed() -> None:
         db.add_all(businesses)
         db.flush()
 
-        n_records = n_links = n_reviews = n_events = 0
+        n_records = n_events = 0
+        record_ids: list = []
 
         for be, archetype in zip(businesses, random.sample(
             ARCHETYPES * (TOTAL_BUSINESSES // len(ARCHETYPES) + 1),
@@ -226,61 +272,25 @@ def seed() -> None:
         )):
             for system in random.sample(systems, random.randint(1, 4)):
                 dirty = _noisy(be.legal_name)
+                # roughly a third of departmental records lack a strong id —
+                # those rely on name + address + PIN to be resolved.
+                keep_pan = random.random() < 0.65
+                keep_gstin = keep_pan and random.random() < 0.6
                 sr = SourceRecord(
                     source_system_id=system.id,
                     external_id=str(uuid.uuid4())[:12],
                     raw_payload={"name": dirty, "system": system.code},
                     normalized_payload={"name": _normalize(dirty)},
                     extracted_name=dirty,
-                    extracted_pan=be.pan if random.random() < 0.7 else None,
-                    extracted_gstin=be.gstin if random.random() < 0.55 else None,
+                    extracted_pan=be.pan if (keep_pan and be.pan) else None,
+                    extracted_gstin=be.gstin if (keep_gstin and be.gstin) else None,
+                    extracted_address=_noisy_address(be.address),
+                    extracted_pin=_noisy_pin(be.pin_code) or None,
                 )
                 db.add(sr)
                 db.flush()
+                record_ids.append(sr.id)
                 n_records += 1
-
-                # crude confidence for the seeded link
-                score = 0.35
-                if sr.extracted_pan and be.pan and sr.extracted_pan == be.pan:
-                    score += 0.4
-                if sr.extracted_gstin and be.gstin:
-                    score += 0.2
-                score = min(round(score + random.uniform(-0.05, 0.1), 2), 0.99)
-
-                if score >= 0.85:
-                    decision = LinkDecisionEnum.AUTO_LINK
-                elif score >= 0.55:
-                    decision = LinkDecisionEnum.REVIEW
-                else:
-                    decision = LinkDecisionEnum.AUTO_LINK  # low-info auto link
-
-                link = EntityRecordLink(
-                    source_record_id=sr.id,
-                    business_entity_id=be.id,
-                    confidence=score,
-                    decision=decision,
-                    explanation={"reasons": ["PAN match" if score > 0.7
-                                             else "Name similarity"]},
-                )
-                db.add(link)
-                n_links += 1
-
-                if decision == LinkDecisionEnum.REVIEW:
-                    db.add(ReviewCase(
-                        source_record_id=sr.id,
-                        candidate_entity_id=be.id,
-                        status=ReviewCaseStatusEnum.OPEN,
-                        confidence=score,
-                        evidence={
-                            "candidate_entity_id": str(be.id),
-                            "candidate_name": be.legal_name,
-                            "confidence": score,
-                            "reasons": ["Partial name similarity",
-                                        "PAN missing on source record"],
-                        },
-                        notes=f"Confidence {score}. Manual verification required.",
-                    ))
-                    n_reviews += 1
 
             for et, sc, occurred in _activity_for(archetype):
                 db.add(ActivityEvent(
@@ -295,23 +305,25 @@ def seed() -> None:
 
         db.commit()
 
-        # audit rows for the automatic link decisions
-        for link in db.query(EntityRecordLink).limit(400).all():
-            db.add(AuditLog(
-                actor_type=AuditActorEnum.SYSTEM,
-                actor_id=None,
-                entity_type="entity_record_link",
-                entity_id=str(link.id),
-                action="AUTO_LINK_EVALUATED",
-                after_state={
-                    "confidence": link.confidence,
-                    "decision": link.decision.value,
-                },
-            ))
-        db.commit()
+        # Resolve every source record through the real matching engine so the
+        # seed data is consistent with production behaviour.
+        print("[*] Running matching engine for every source record ...")
+        for rid in record_ids:
+            try:
+                process_source_record(db, rid)
+            except Exception as exc:  # noqa: BLE001
+                db.rollback()
+                print(f"    ! {rid}: {exc}")
+
+        n_links = db.query(EntityRecordLink).count()
+        n_reviews = (
+            db.query(ReviewCase)
+            .filter(ReviewCase.status == ReviewCaseStatusEnum.OPEN)
+            .count()
+        )
 
         print(f"[+] source_systems : {len(systems)}")
-        print(f"[+] businesses     : {len(businesses)}")
+        print(f"[+] businesses     : {db.query(BusinessEntity).count()}")
         print(f"[+] source_records : {n_records}")
         print(f"[+] links          : {n_links}")
         print(f"[+] review_cases   : {n_reviews}")

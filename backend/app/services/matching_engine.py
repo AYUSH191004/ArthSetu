@@ -13,7 +13,14 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from backend.app.services.scoring import similarity, normalize_text
+from backend.app.services.scoring import (
+    address_similarity,
+    normalize_address,
+    normalize_text,
+    normalize_pin,
+    pin_matches,
+    similarity,
+)
 from backend.app.services.ubid_service import generate_ubid
 
 from backend.app.db.models.business_entity import BusinessEntity
@@ -38,13 +45,24 @@ REVIEW_THRESHOLD = 0.70
 
 # ============================================================
 # WEIGHTS
+#   GSTIN alone is definitive (unique government id).
+#   PAN alone is a strong anchor (same legal entity / proprietor).
+#   Name + address + PIN together corroborate enough for human review
+#   but never enough for an automatic link without an id anchor.
 # ============================================================
 
 GSTIN_WEIGHT = 0.60
 PAN_WEIGHT = 0.55
-NAME_WEIGHT = 0.20
-ADDRESS_WEIGHT = 0.15
-PIN_WEIGHT = 0.05
+NAME_WEIGHT = 0.42        # x fuzzy name score
+ADDRESS_WEIGHT = 0.28     # x fuzzy address score
+PIN_WEIGHT = 0.12         # exact 6-digit PIN match
+
+# A shared PIN only counts once the names are at least loosely related —
+# a bare PIN covers thousands of businesses.
+PIN_REQUIRES_NAME_SIM = 0.35
+
+# Filler tokens that make a poor blocking key.
+_NAME_STOPWORDS = {"M", "S", "MS", "MESSRS", "THE"}
 
 
 # ============================================================
@@ -181,34 +199,35 @@ def process_source_record(
 # CANDIDATE BLOCKING
 # ============================================================
 
+def _name_block_tokens(name: str) -> List[str]:
+    """The most discriminating leading tokens of a name, past filler like 'M/S'."""
+    tokens = [t for t in name.split(" ") if t and t not in _NAME_STOPWORDS]
+    return tokens[:2]
+
+
 def _find_candidates(
     db: Session,
     source_record: SourceRecord,
 ) -> List[BusinessEntity]:
-    """
-    Conservative blocking.
-    Avoid full-table scans.
-    """
+    """Conservative blocking — avoid full-table scans while catching noisy names."""
 
     name = normalize_text(source_record.extracted_name)
-    first_token = name.split(" ")[0] if name else None
+    source_pin = normalize_pin(source_record.extracted_pin)
 
     conditions = []
 
     if source_record.extracted_gstin:
-        conditions.append(
-            BusinessEntity.gstin == source_record.extracted_gstin
-        )
+        conditions.append(BusinessEntity.gstin == source_record.extracted_gstin)
 
     if source_record.extracted_pan:
-        conditions.append(
-            BusinessEntity.pan == source_record.extracted_pan
-        )
+        conditions.append(BusinessEntity.pan == source_record.extracted_pan)
 
-    if first_token:
-        conditions.append(
-            BusinessEntity.normalized_name.ilike(f"{first_token}%")
-        )
+    for token in _name_block_tokens(name):
+        conditions.append(BusinessEntity.normalized_name.ilike(f"{token}%"))
+        conditions.append(BusinessEntity.normalized_name.ilike(f"% {token}%"))
+
+    if source_pin:
+        conditions.append(BusinessEntity.pin_code == source_pin)
 
     if not conditions:
         return []
@@ -216,7 +235,7 @@ def _find_candidates(
     return (
         db.query(BusinessEntity)
         .filter(or_(*conditions))
-        .limit(25)
+        .limit(50)
         .all()
     )
 
@@ -245,6 +264,13 @@ def _best_candidate(
     return best_entity, round(best_score, 4), best_reasons
 
 
+def _pan_from_gstin(gstin: Optional[str]) -> Optional[str]:
+    """An Indian GSTIN embeds the PAN at positions 2..12."""
+    if gstin and len(gstin) >= 12:
+        return gstin[2:12].upper()
+    return None
+
+
 def _score_candidate(
     source_record: SourceRecord,
     entity: BusinessEntity,
@@ -253,46 +279,44 @@ def _score_candidate(
     score = 0.0
     reasons: List[str] = []
 
-    # normalized_payload may come back as dict or JSON string
     sr_payload = _as_dict(source_record.normalized_payload)
 
-    # Strong IDs
-    if (
-        source_record.extracted_gstin
-        and entity.gstin
-        and source_record.extracted_gstin == entity.gstin
-    ):
+    src_gstin = source_record.extracted_gstin
+    src_pan = source_record.extracted_pan or _pan_from_gstin(src_gstin)
+    src_address = source_record.extracted_address or sr_payload.get("address")
+    src_pin = source_record.extracted_pin or sr_payload.get("pin_code")
+
+    # --- Strong identifiers ---------------------------------------------
+    if src_gstin and entity.gstin and src_gstin == entity.gstin:
         score += GSTIN_WEIGHT
         reasons.append("GSTIN exact match")
 
-    if (
-        source_record.extracted_pan
-        and entity.pan
-        and source_record.extracted_pan == entity.pan
-    ):
+    entity_pan = entity.pan or _pan_from_gstin(entity.gstin)
+    if src_pan and entity_pan and src_pan == entity_pan:
         score += PAN_WEIGHT
         reasons.append("PAN exact match")
 
-    # Name similarity
-    name_score = similarity(
-        source_record.extracted_name,
-        entity.legal_name,
-    )
+    # --- Name --------------------------------------------------------------
+    name_score = similarity(source_record.extracted_name, entity.legal_name)
     score += NAME_WEIGHT * name_score
     reasons.append(f"Name similarity {round(name_score, 2)}")
 
-    # Optional note: source payload contains address/pin, but BusinessEntity
-    # currently has no address/pin fields to compare against, so we do not
-    # add address/pin score here.
-    source_address = sr_payload.get("address")
-    source_pin = sr_payload.get("pin_code")
+    # --- Address --------------------------------------------------------
+    if src_address and entity.address:
+        addr_score = address_similarity(src_address, entity.address)
+        if addr_score > 0:
+            score += ADDRESS_WEIGHT * addr_score
+            reasons.append(f"Address similarity {round(addr_score, 2)}")
 
-    if source_address:
-        reasons.append("Source address present")
-    if source_pin:
-        reasons.append("Source pin present")
+    # --- PIN code (only meaningful alongside a plausible name) ---------
+    if pin_matches(src_pin, entity.pin_code):
+        if name_score >= PIN_REQUIRES_NAME_SIM:
+            score += PIN_WEIGHT
+            reasons.append(f"PIN code match ({normalize_pin(src_pin)})")
+        else:
+            reasons.append("PIN code match (ignored — names unrelated)")
 
-    score = min(score, 1.0)
+    score = min(round(score, 4), 1.0)
     return score, reasons
 
 # ============================================================
@@ -392,11 +416,12 @@ def _create_new_entity(
     entity = BusinessEntity(
         ubid_code=generate_ubid(),
         legal_name=source_record.extracted_name or "UNKNOWN",
-        normalized_name=normalize_text(
-            source_record.extracted_name
-        ),
+        normalized_name=normalize_text(source_record.extracted_name),
         pan=source_record.extracted_pan,
         gstin=source_record.extracted_gstin,
+        address=source_record.extracted_address,
+        normalized_address=normalize_address(source_record.extracted_address),
+        pin_code=normalize_pin(source_record.extracted_pin) or None,
         status=EntityStatusEnum.UNKNOWN,
     )
 

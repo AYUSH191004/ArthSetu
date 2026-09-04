@@ -36,6 +36,7 @@ def search_businesses(
     q: str | None = Query(default=None, description="UBID, name, PAN or GSTIN"),
     status: str | None = Query(default=None),
     district: str | None = Query(default=None),
+    pin: str | None = Query(default=None, description="6-digit PIN code"),
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
@@ -50,12 +51,15 @@ def search_businesses(
                 BusinessEntity.normalized_name.ilike(like),
                 BusinessEntity.pan.ilike(like),
                 BusinessEntity.gstin.ilike(like),
+                BusinessEntity.address.ilike(like),
             )
         )
     if status:
         query = query.filter(BusinessEntity.status == status.lower())
     if district:
         query = query.filter(BusinessEntity.district.ilike(f"%{district}%"))
+    if pin:
+        query = query.filter(BusinessEntity.pin_code == pin.strip())
 
     total = query.with_entities(func.count(BusinessEntity.id)).scalar() or 0
 
@@ -76,6 +80,7 @@ def search_businesses(
                 business_name=r.legal_name,
                 status=_enum_value(r.status),
                 district=r.district,
+                pin_code=r.pin_code,
                 pan=r.pan,
                 gstin=r.gstin,
             )
@@ -114,6 +119,8 @@ def get_business_profile(ubid: str, db: Session = Depends(get_db)):
             department=ss.department if ss else None,
             external_id=sr.external_id,
             extracted_name=sr.extracted_name,
+            extracted_address=sr.extracted_address,
+            extracted_pin=sr.extracted_pin,
             confidence=link.confidence,
             decision=_enum_value(link.decision) if link.decision else None,
         )
@@ -143,6 +150,10 @@ def get_business_profile(ubid: str, db: Session = Depends(get_db)):
         evidence.append(MatchingEvidence(signal="GSTIN on file", value=entity.gstin))
     if entity.pan:
         evidence.append(MatchingEvidence(signal="PAN on file", value=entity.pan))
+    if entity.pin_code:
+        evidence.append(MatchingEvidence(signal="PIN code", value=entity.pin_code))
+    if entity.address:
+        evidence.append(MatchingEvidence(signal="Address on file", value=entity.address))
 
     events = (
         db.query(ActivityEvent)
@@ -182,6 +193,8 @@ def get_business_profile(ubid: str, db: Session = Depends(get_db)):
         status=_enum_value(entity.status),
         pan=entity.pan,
         gstin=entity.gstin,
+        address=entity.address,
+        pin_code=entity.pin_code,
         district=entity.district,
         sector=entity.sector,
         linked_records_count=len(linked_records),

@@ -72,6 +72,7 @@ export interface BusinessSearchItem {
   business_name: string;
   status: string;
   district: string | null;
+  pin_code: string | null;
   pan: string | null;
   gstin: string | null;
 }
@@ -83,6 +84,8 @@ export interface LinkedRecord {
   department: string | null;
   external_id: string | null;
   extracted_name: string | null;
+  extracted_address: string | null;
+  extracted_pin: string | null;
   confidence: number | null;
   decision: string | null;
 }
@@ -111,6 +114,8 @@ export interface BusinessProfile {
   status: string;
   pan: string | null;
   gstin: string | null;
+  address: string | null;
+  pin_code: string | null;
   district: string | null;
   sector: string | null;
   linked_records_count: number;

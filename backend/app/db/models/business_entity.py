@@ -18,6 +18,10 @@ class BusinessEntity(Base, UUIDPKMixin, TimestampMixin):
     pan = mapped_column(String(20), unique=True, nullable=True)
     gstin = mapped_column(String(20), unique=True, nullable=True)
 
+    address = mapped_column(String(500), nullable=True)
+    normalized_address = mapped_column(String(500), index=True, nullable=True)
+    pin_code = mapped_column(String(6), index=True, nullable=True)
+
     district = mapped_column(String(100), index=True, nullable=True)
     sector = mapped_column(String(100), nullable=True)
 

@@ -57,3 +57,47 @@ def normalized_contains(a: Optional[str], b: Optional[str]) -> bool:
         return False
 
     return na in nb or nb in na
+
+
+# ------------------------------------------------------------
+# Address / PIN
+# ------------------------------------------------------------
+
+# Words that carry no discriminating signal in an Indian address.
+_ADDRESS_STOPWORDS = {
+    "SHOP", "NO", "PLOT", "HOUSE", "FLAT", "ROAD", "RD", "STREET", "ST",
+    "NEAR", "OPP", "OPPOSITE", "BEHIND", "MAIN", "GALI", "MARKET", "MKT",
+    "NAGAR", "COLONY", "SECTOR", "PHASE", "BLOCK", "WARD", "PO", "PS",
+    "DIST", "DISTRICT", "TEH", "TEHSIL", "PIN", "PUNJAB", "INDIA",
+}
+
+
+def normalize_address(value: Optional[str]) -> str:
+    """Normalize an address to its discriminating tokens (drops filler words)."""
+    norm = normalize_text(value)
+    if not norm:
+        return ""
+    tokens = [t for t in norm.split(" ") if t and t not in _ADDRESS_STOPWORDS]
+    return " ".join(tokens)
+
+
+def address_similarity(a: Optional[str], b: Optional[str]) -> float:
+    """Token-set similarity of two addresses, 0.0–1.0 (filler words removed)."""
+    na = normalize_address(a)
+    nb = normalize_address(b)
+    if not na or not nb:
+        return 0.0
+    return fuzz.token_set_ratio(na, nb) / 100.0
+
+
+def normalize_pin(value: Optional[str]) -> str:
+    """Return a 6-digit Indian PIN, or '' if the input has no clean 6-digit code."""
+    if not value:
+        return ""
+    digits = re.sub(r"\D", "", str(value))
+    return digits if len(digits) == 6 else ""
+
+
+def pin_matches(a: Optional[str], b: Optional[str]) -> bool:
+    na, nb = normalize_pin(a), normalize_pin(b)
+    return bool(na) and na == nb

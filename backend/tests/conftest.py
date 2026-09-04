@@ -43,6 +43,7 @@ from backend.app.db.models.source_system import SourceSystem  # noqa: E402
 from backend.app.db.models.user import User  # noqa: E402
 from backend.app.db.session import SessionLocal, engine  # noqa: E402
 from backend.app.core.security import hash_password  # noqa: E402
+from backend.app.services.scoring import normalize_address  # noqa: E402
 from backend.app.main import app  # noqa: E402
 
 
@@ -109,6 +110,9 @@ def seed(db: Session) -> dict:
         normalized_name="acme steel works",
         pan="ABCDE1234F",
         gstin="03ABCDE1234F1Z5",
+        address="Plot 42, Focal Point 3, Ludhiana, Punjab",
+        normalized_address=normalize_address("Plot 42, Focal Point 3, Ludhiana, Punjab"),
+        pin_code="141001",
         district="Ludhiana",
         sector="Manufacturing",
         status=EntityStatusEnum.ACTIVE,
@@ -118,6 +122,8 @@ def seed(db: Session) -> dict:
         legal_name="Beta Traders",
         normalized_name="beta traders",
         pan="ZZZZZ9999Z",
+        address="Shop 9, Grain Market, Mohali, Punjab",
+        pin_code="160055",
         district="Mohali",
         sector="Retail",
         status=EntityStatusEnum.CLOSED,
@@ -134,6 +140,8 @@ def seed(db: Session) -> dict:
         extracted_name="ACME STEEL WORKS",
         extracted_pan="ABCDE1234F",
         extracted_gstin="03ABCDE1234F1Z5",
+        extracted_address="PLOT 42, FOCAL POINT, LUDHIANA",
+        extracted_pin="141001",
     )
     # A source record with no plausible match.
     sr_new = SourceRecord(
@@ -143,6 +151,8 @@ def seed(db: Session) -> dict:
         normalized_payload={"name": "zephyr logistics"},
         extracted_name="Zephyr Logistics",
         extracted_pan="QQQQQ0000Q",
+        extracted_address="Plot 7, Transport Nagar, Amritsar",
+        extracted_pin="143001",
     )
     db.add_all([sr_match, sr_new])
     db.flush()
