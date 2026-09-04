@@ -330,28 +330,42 @@ immediately. Hardening baked into the images:
 ## Deploying to Vercel + Render
 
 An alternative to self-hosting the compose stack: static frontend on Vercel,
-containerized backend + managed Postgres on Render. The backend image
-listens on `$PORT` when it's set (Render assigns this dynamically; falls
-back to 8000 otherwise), so the same `backend/Dockerfile` works on both
-paths unmodified.
+containerized backend on Render, Postgres from a free external provider.
+The backend image listens on `$PORT` when it's set (Render assigns this
+dynamically; falls back to 8000 otherwise), so the same `backend/Dockerfile`
+works on both paths unmodified.
 
-There's a chicken-and-egg between the two platforms — the backend's CORS
+Render's own Postgres — even the free tier — requires a card on file
+(anti-abuse policy, applies to every database regardless of plan).
+[`render.yaml`](../render.yaml) sides around it: the web service is on
+`plan: free` (genuinely free, no card) and `DATABASE_URL` isn't provisioned
+by Render at all — you bring a free Postgres from
+[Neon](https://neon.tech) or [Supabase](https://supabase.com) instead,
+neither of which asks for a card on their free tier.
+
+There's a chicken-and-egg between the platforms too — the backend's CORS
 list needs the frontend's URL, the frontend's build needs the backend's URL
 — so deploy in this order:
 
-1. **Backend first.** Render dashboard → New → Blueprint → point it at this
-   repo. [`render.yaml`](../render.yaml) provisions a Postgres instance
-   (`arthsetu-db`) and a Docker web service (`arthsetu-backend`, built from
-   `backend/Dockerfile` with the repo root as build context) wired
-   together, with `SECRET_KEY` and `BOOTSTRAP_ADMIN_PASSWORD` auto-generated
-   (`generateValue: true` — read the actual values off the service's
-   Environment tab after it deploys, you'll need the password to log in).
-   `CORS_ORIGINS` in the blueprint is a placeholder; you'll come back to it
-   in step 3. Note the service's `https://arthsetu-backend.onrender.com`
-   -style URL once it's live and healthy.
+1. **Database.** Sign up at [neon.tech](https://neon.tech) (or Supabase),
+   create a project, copy its connection string — looks like
+   `postgresql://user:password@host/dbname?sslmode=require`. That works
+   as-is for `DATABASE_URL`; SQLAlchemy defaults to the psycopg2 driver
+   already in `backend/requirements.txt`, no `+psycopg2` suffix needed.
 
-2. **Frontend next.** Import the repo into Vercel, set **Root Directory**
-   to `frontend`. Framework preset (Vite) and build command are
+2. **Backend on Render.** Dashboard → New → Blueprint → point it at this
+   repo. Render reads `render.yaml` and, because `DATABASE_URL` has no
+   `value`/`generateValue`, prompts you to paste it in — use the Neon
+   connection string from step 1. `SECRET_KEY` and `BOOTSTRAP_ADMIN_PASSWORD`
+   are auto-generated (read the actual values off the service's
+   Environment tab after it deploys — you'll need the password to log in).
+   `CORS_ORIGINS` in the blueprint is a placeholder; you'll come back to it
+   in step 4. Note the service's `https://arthsetu-backend.onrender.com`
+   -style URL once it's live and healthy. (Free plan: spins down after
+   ~15 min idle, ~50s cold start on the next request — fine for a demo.)
+
+3. **Frontend on Vercel.** Import the repo, set **Root Directory** to
+   `frontend`. Framework preset (Vite) and build command are
    auto-detected. Add one environment variable before the first build:
    `VITE_API_BASE_URL=https://<your-render-url>/api/v1` — Vite bakes this
    into the JS bundle at build time, so it can't be changed later without a
@@ -360,13 +374,13 @@ list needs the frontend's URL, the frontend's build needs the backend's URL
    security headers nginx sets in the Docker path. Note the resulting
    `https://<project>.vercel.app` URL.
 
-3. **Close the loop.** Back on Render, update `CORS_ORIGINS` on
-   `arthsetu-backend` to the real Vercel URL from step 2 (changing an env
+4. **Close the loop.** Back on Render, update `CORS_ORIGINS` on
+   `arthsetu-backend` to the real Vercel URL from step 3 (changing an env
    var triggers a redeploy automatically). Preview-deployment URLs
    (`<project>-<hash>.vercel.app`) won't match unless added too —
    `CORS_ORIGINS` is an exact comma-separated list, no wildcards.
 
-4. **Log in** with `BOOTSTRAP_ADMIN_USERNAME` / the generated
+5. **Log in** with `BOOTSTRAP_ADMIN_USERNAME` / the generated
    `BOOTSTRAP_ADMIN_PASSWORD` from step 1. `backend/seed_dev.py` (drops
    tables, installs the publicly-known demo accounts below) refuses to run
    at all while `APP_ENV=production` — exactly the case here — so it can't
