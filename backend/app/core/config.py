@@ -1,0 +1,30 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    APP_NAME: str = "ArthSetu"
+    APP_VERSION: str = "1.0.0"
+    APP_ENV: str = "development"
+    API_V1_PREFIX: str = "/api/v1"
+
+    # Local dev defaults to a portable SQLite file. Override via the
+    # DATABASE_URL env var (e.g. postgresql+psycopg2://user:pass@host/db).
+    DATABASE_URL: str = "sqlite:///./arthsetu_dev.db"
+
+    # Comma-separated list of allowed browser origins for CORS.
+    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+
+    LOG_LEVEL: str = "INFO"
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore",
+    )
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+
+settings = Settings()

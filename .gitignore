@@ -1,0 +1,44 @@
+# ---- Python ----
+.venv/
+venv/
+env/
+pro-env/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Environment ----
+.env
+*.env
+!*.env.example
+backend/.env
+
+# ---- Node / frontend ----
+node_modules/
+dist/
+build/
+.vite/
+*.local
+
+# ---- Local databases & dumps ----
+*.db
+*.sqlite
+*.sqlite3
+_autogen_tmp.db
+arthsetu_dev.db
+arthsetu_dump.sql
+
+# ---- Scratch / local artifacts ----
+electricity_*.json
+api_samples.json
+*.log
+
+# ---- Editor / OS ----
+.DS_Store
+.idea/
+.vscode/
+*.swp
