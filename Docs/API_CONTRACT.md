@@ -367,13 +367,22 @@ list needs the frontend's URL, the frontend's build needs the backend's URL
    `CORS_ORIGINS` is an exact comma-separated list, no wildcards.
 
 4. **Log in** with `BOOTSTRAP_ADMIN_USERNAME` / the generated
-   `BOOTSTRAP_ADMIN_PASSWORD` from step 1. Optionally load the synthetic
-   demo dataset via Render's Shell tab on the backend service:
+   `BOOTSTRAP_ADMIN_PASSWORD` from step 1. `backend/seed_dev.py` (drops
+   tables, installs the publicly-known demo accounts below) refuses to run
+   at all while `APP_ENV=production` — exactly the case here — so it can't
+   be run by habit against a real deployment:
    ```bash
-   python -m backend.seed_dev --reset
+   $ python -m backend.seed_dev --reset
+   Refusing to run against APP_ENV=production: this seeder drops tables
+   and/or installs publicly-known demo credentials.
+   Pass --force-production-seed if you genuinely mean it.
    ```
-   **This wipes and recreates every table**, including `user_account` — it
-   replaces the bootstrap admin with the seeder's own demo accounts
-   (`admin` / `arthsetu-admin`, etc., see `Docs/API_CONTRACT.md#authentication`).
-   Fine for a demo deployment; skip it for a real one and keep the
-   generated bootstrap credentials.
+   That's the correct outcome for a real deployment — leave it there and
+   keep the generated bootstrap credentials. For a throwaway showcase
+   deployment where you *do* want the synthetic dataset, opt in explicitly:
+   ```bash
+   python -m backend.seed_dev --reset --force-production-seed
+   ```
+   which wipes and recreates every table, including `user_account` —
+   replacing the bootstrap admin with the seeder's own demo accounts
+   (`admin` / `arthsetu-admin`, etc., see **Authentication** above).

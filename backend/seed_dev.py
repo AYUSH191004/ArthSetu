@@ -8,6 +8,9 @@ business gets a genuine status snapshot + audit trail.
 Run from the repo root:
     python -m backend.seed_dev            # seed if empty
     python -m backend.seed_dev --reset    # drop + recreate + seed
+
+Refuses to run at all when APP_ENV=production (drops tables, installs
+publicly-known demo passwords) unless --force-production-seed is passed.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ import string
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from backend.app.core.config import settings
 from backend.app.db.base import Base
 from backend.app.db.session import SessionLocal, engine
 from backend.app.db import models  # noqa: F401  (register tables)
@@ -197,7 +201,21 @@ def _activity_for(archetype: str) -> list[tuple[EventTypeEnum, float, datetime]]
     return events
 
 
-def reset() -> None:
+def _refuse_in_production(force: bool) -> None:
+    """This seeder drops tables and installs publicly-known demo passwords
+    (see DEMO_USERS / README) — never something to run against a real
+    deployment. Mirrors the fail-fast guard in core/config.py."""
+    if force or settings.APP_ENV.lower() != "production":
+        return
+    raise SystemExit(
+        "\nRefusing to run against APP_ENV=production: this seeder drops "
+        "tables and/or installs publicly-known demo credentials.\n"
+        "Pass --force-production-seed if you genuinely mean it.\n"
+    )
+
+
+def reset(force: bool = False) -> None:
+    _refuse_in_production(force)
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
@@ -223,7 +241,8 @@ def seed_users(db) -> None:
         print(f"      {username:10s} / {password:16s} ({role.value})")
 
 
-def seed() -> None:
+def seed(force: bool = False) -> None:
+    _refuse_in_production(force)
     db = SessionLocal()
     try:
         seed_users(db)
@@ -352,8 +371,13 @@ def seed() -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--reset", action="store_true", help="drop + recreate")
+    parser.add_argument(
+        "--force-production-seed",
+        action="store_true",
+        help="required to run this against APP_ENV=production; see the warning it prints otherwise",
+    )
     args = parser.parse_args()
     if args.reset:
         print("[*] Resetting schema ...")
-        reset()
-    seed()
+        reset(force=args.force_production_seed)
+    seed(force=args.force_production_seed)
