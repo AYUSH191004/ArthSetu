@@ -379,6 +379,8 @@ React + TypeScript console (Vite + Tailwind, TanStack Query). Complete:
   activity timeline, explainable status inference, per-business audit trail
 - **Review queue** — human-in-the-loop approve / reject with real link confirmation,
   reviewer attribution
+- **Corrections** — split a wrongly-linked record, pin a lifecycle status, reassign an
+  activity event; every correction is reversible from a history view
 - **District analytics** — stacked bars + sortable table with drill-down into search
 
 ---

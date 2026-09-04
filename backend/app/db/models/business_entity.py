@@ -1,4 +1,4 @@
-from sqlalchemy import String
+from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.base import Base
@@ -30,6 +30,12 @@ class BusinessEntity(Base, UUIDPKMixin, TimestampMixin):
         default=EntityStatusEnum.UNKNOWN,
         index=True,
     )
+
+    # A reviewer can pin the status; the engine then records its opinion in a
+    # snapshot but leaves `status` untouched until the lock is cleared.
+    status_locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    status_override_reason = mapped_column(String(500), nullable=True)
+    status_overridden_by = mapped_column(String(100), nullable=True)
 
     links = relationship("EntityRecordLink", back_populates="business_entity")
     activities = relationship("ActivityEvent", back_populates="business_entity")

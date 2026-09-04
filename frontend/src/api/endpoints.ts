@@ -4,6 +4,8 @@ import type {
   AuditEntry,
   BusinessProfile,
   BusinessSearchItem,
+  CorrectionEntry,
+  CorrectionResult,
   DashboardResponse,
   DistrictRow,
   HealthResponse,
@@ -125,6 +127,37 @@ export interface AuditParams {
 export const auditApi = {
   list: (params: AuditParams) =>
     api.get<Page<AuditEntry>>("/audit", { params }).then((r) => r.data),
+};
+
+export const correctionsApi = {
+  history: (params: { limit?: number; offset?: number } = {}) =>
+    api.get<Page<CorrectionEntry>>("/corrections", { params }).then((r) => r.data),
+  splitLink: (linkId: string, reason: string, mode: "new_entity" | "reopen_review") =>
+    api
+      .post<CorrectionResult>(`/corrections/links/${linkId}/split`, { reason, mode })
+      .then((r) => r.data),
+  overrideStatus: (ubid: string, status: string, reason: string) =>
+    api
+      .post<CorrectionResult>(`/corrections/entities/${ubid}/status-override`, {
+        status,
+        reason,
+      })
+      .then((r) => r.data),
+  clearOverride: (ubid: string) =>
+    api
+      .post<CorrectionResult>(`/corrections/entities/${ubid}/status-override/clear`)
+      .then((r) => r.data),
+  reassignEvent: (eventId: string, targetUbid: string, reason: string) =>
+    api
+      .post<CorrectionResult>(`/corrections/events/${eventId}/reassign`, {
+        target_ubid: targetUbid,
+        reason,
+      })
+      .then((r) => r.data),
+  undo: (auditId: string) =>
+    api
+      .post<CorrectionResult>(`/corrections/undo/${auditId}`)
+      .then((r) => r.data),
 };
 
 export const ingestApi = {

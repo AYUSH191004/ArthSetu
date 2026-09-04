@@ -164,6 +164,7 @@ def get_business_profile(ubid: str, db: Session = Depends(get_db)):
     )
     timeline = [
         TimelineEvent(
+            id=str(e.id),
             date=e.event_date,
             event=_enum_value(e.event_type),
             score=e.score,
@@ -191,6 +192,8 @@ def get_business_profile(ubid: str, db: Session = Depends(get_db)):
         ubid=entity.ubid_code,
         business_name=entity.legal_name,
         status=_enum_value(entity.status),
+        status_locked=bool(entity.status_locked),
+        status_override_reason=entity.status_override_reason,
         pan=entity.pan,
         gstin=entity.gstin,
         address=entity.address,

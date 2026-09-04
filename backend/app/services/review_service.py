@@ -75,6 +75,7 @@ def approve_review_case(
     before_status = _enum_value(row.status)
 
     link_id = None
+    link_created = False
     if row.candidate_entity_id is not None:
         existing = (
             db.query(EntityRecordLink)
@@ -89,6 +90,7 @@ def approve_review_case(
             existing.confidence = row.confidence or existing.confidence
             link_id = existing.id
         else:
+            link_created = True
             link = EntityRecordLink(
                 source_record_id=row.source_record_id,
                 business_entity_id=row.candidate_entity_id,
@@ -120,6 +122,7 @@ def approve_review_case(
             if row.candidate_entity_id
             else None,
             "link_id": str(link_id) if link_id else None,
+            "link_created": link_created,
         },
     )
 

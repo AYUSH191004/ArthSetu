@@ -134,6 +134,7 @@ class BusinessSearchResponse(BaseModel):
 
 
 class TimelineEvent(BaseModel):
+    id: str
     date: Optional[datetime] = None
     event: str
     score: Optional[float] = None
@@ -168,6 +169,8 @@ class BusinessProfileResponse(BaseModel):
     ubid: str
     business_name: str
     status: str
+    status_locked: bool = False
+    status_override_reason: Optional[str] = None
     pan: Optional[str] = None
     gstin: Optional[str] = None
     address: Optional[str] = None
@@ -225,6 +228,8 @@ class StatusResultResponse(BaseModel):
     business_entity_id: str
     ubid_code: str
     status: str
+    engine_status: Optional[str] = None
+    locked: bool = False
     confidence: float
     reasons: List[str]
 
@@ -331,3 +336,48 @@ class ProcessPendingResponse(BaseModel):
 
 class PendingCountResponse(BaseModel):
     pending: int
+
+
+# ------------------------------------------------------------
+# Corrections (reviewer graph edits)
+# ------------------------------------------------------------
+
+class SplitLinkRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+    mode: Literal["new_entity", "reopen_review"] = "reopen_review"
+
+
+class StatusOverrideRequest(BaseModel):
+    status: Literal["active", "dormant", "closed", "unknown"]
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class ReassignEventRequest(BaseModel):
+    target_ubid: str
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class CorrectionResult(BaseModel):
+    message: str
+    audit_id: str
+    detail: Optional[Any] = None
+
+
+class CorrectionEntry(BaseModel):
+    audit_id: str
+    action: str
+    actor_id: Optional[str] = None
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    summary: str
+    reason: Optional[str] = None
+    created_at: Optional[datetime] = None
+    undone: bool = False
+    reversible: bool = False
+
+
+class CorrectionListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: List[CorrectionEntry]

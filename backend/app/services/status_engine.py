@@ -47,23 +47,39 @@ def infer_business_status(
         events = _fetch_events(db, business_entity_id)
         result = _infer_from_events(events)
 
+        reasons = list(result["reasons"])
+        if entity.status_locked:
+            reasons.insert(
+                0,
+                f"Status pinned to {entity.status.value if hasattr(entity.status, 'value') else entity.status} "
+                f"by reviewer — engine opinion recorded only",
+            )
+
         save_status_snapshot(
             db=db,
             business_entity_id=entity.id,
             status=result["status_enum"],
             confidence=result["confidence"],
-            reasons=result["reasons"],
+            reasons=reasons,
         )
 
-        entity.status = result["status_enum"]
+        if not entity.status_locked:
+            entity.status = result["status_enum"]
         db.commit()
 
+        effective = (
+            (entity.status.value if hasattr(entity.status, "value") else str(entity.status)).upper()
+            if entity.status_locked
+            else result["status"]
+        )
         return {
             "business_entity_id": str(entity.id),
             "ubid_code": entity.ubid_code,
-            "status": result["status"],
+            "status": effective,
+            "engine_status": result["status"],
+            "locked": bool(entity.status_locked),
             "confidence": result["confidence"],
-            "reasons": result["reasons"],
+            "reasons": reasons,
         }
 
     except Exception:

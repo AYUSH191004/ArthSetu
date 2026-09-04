@@ -96,6 +96,7 @@ export interface MatchingEvidence {
 }
 
 export interface TimelineEvent {
+  id: string;
   date: string | null;
   event: string;
   score: number | null;
@@ -112,6 +113,8 @@ export interface BusinessProfile {
   ubid: string;
   business_name: string;
   status: string;
+  status_locked: boolean;
+  status_override_reason: string | null;
   pan: string | null;
   gstin: string | null;
   address: string | null;
@@ -161,8 +164,29 @@ export interface StatusResult {
   business_entity_id: string;
   ubid_code: string;
   status: string;
+  engine_status: string | null;
+  locked: boolean;
   confidence: number;
   reasons: string[];
+}
+
+export interface CorrectionEntry {
+  audit_id: string;
+  action: string;
+  actor_id: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  summary: string;
+  reason: string | null;
+  created_at: string | null;
+  undone: boolean;
+  reversible: boolean;
+}
+
+export interface CorrectionResult {
+  message: string;
+  audit_id: string;
+  detail: unknown;
 }
 
 export interface MatchingResult {

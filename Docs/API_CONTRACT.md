@@ -20,6 +20,7 @@ Roles (each includes the ones below it): **admin** > **reviewer** > **viewer**.
 | Read dashboard / search / profiles / analytics / audit | viewer |
 | Recompute a business status (`GET /status/{ubid}`) | reviewer |
 | Approve / reject a review case | reviewer |
+| Corrections (split / status override / reassign / undo) | reviewer |
 | Batch status recompute (`POST /status/run-all`) | admin |
 | Trigger matching (`POST /matching/process/...`) | admin |
 | Import records (`POST /ingest/csv`, `/ingest/records`, `/ingest/process-pending`) | admin |
@@ -126,6 +127,28 @@ Seeded demo accounts: `admin` / `arthsetu-admin`, `reviewer` / `arthsetu-review`
 - No body. The reviewer is taken from the bearer token and recorded in the audit trail.
 - Approve confirms the proposed link (creates/promotes an `entity_record_link`,
   decision `manual`) and writes an audit row. Reject leaves the record separate.
+
+## Corrections  (reviewer role — reversible graph edits)
+
+`GET  /api/v1/corrections?limit=30&offset=0` → paged history of every correction,
+each with `reversible` / `undone` flags and a `summary`.
+
+`POST /api/v1/corrections/links/{link_id}/split`
+`{ "reason": "...", "mode": "reopen_review" | "new_entity" }` — unlinks a source
+record from a business: back to the review queue, or into its own identity.
+
+`POST /api/v1/corrections/entities/{ubid}/status-override`
+`{ "status": "active|dormant|closed", "reason": "..." }` — pins the lifecycle
+status. The engine keeps recording its opinion in snapshots but stops changing
+`status` until the pin is cleared.
+`POST /api/v1/corrections/entities/{ubid}/status-override/clear` — unpin + recompute.
+
+`POST /api/v1/corrections/events/{event_id}/reassign`
+`{ "target_ubid": "UBID000123", "reason": "..." }` — moves an activity event to a
+different business; both entities' statuses are recomputed.
+
+`POST /api/v1/corrections/undo/{audit_id}` — reverses any of the above (and
+approve/reject); refuses a second undo of the same action.
 ```json
 { "message": "Review approved and link confirmed", "review_id": "...",
   "status": "approved", "linked_entity_id": "...", "link_id": "..." }

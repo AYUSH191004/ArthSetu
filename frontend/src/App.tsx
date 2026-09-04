@@ -7,6 +7,7 @@ import { BusinessSearchPage } from "@/pages/BusinessSearchPage";
 import { BusinessProfilePage } from "@/pages/BusinessProfilePage";
 import { ReviewQueuePage } from "@/pages/ReviewQueuePage";
 import { DistrictAnalyticsPage } from "@/pages/DistrictAnalyticsPage";
+import { CorrectionsPage } from "@/pages/CorrectionsPage";
 import { IngestionPage } from "@/pages/IngestionPage";
 import { UsersPage } from "@/pages/UsersPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
@@ -28,6 +29,14 @@ export default function App() {
         <Route path="businesses/:ubid" element={<BusinessProfilePage />} />
         <Route path="reviews" element={<ReviewQueuePage />} />
         <Route path="districts" element={<DistrictAnalyticsPage />} />
+        <Route
+          path="corrections"
+          element={
+            <RequireAuth role="reviewer">
+              <CorrectionsPage />
+            </RequireAuth>
+          }
+        />
         <Route
           path="ingest"
           element={

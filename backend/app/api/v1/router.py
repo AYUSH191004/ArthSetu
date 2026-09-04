@@ -6,6 +6,7 @@ from backend.app.api.v1.routes import (
     audit,
     auth,
     business_public,
+    corrections,
     dashboard,
     health,
     ingest,
@@ -33,6 +34,10 @@ router.include_router(ingest.router, prefix="/ingest", tags=["Ingestion"], depen
 # --- Reviewer or above --------------------------------------------------
 router.include_router(
     status.router, prefix="/status", tags=["Status"],
+    dependencies=[Depends(require_reviewer)],
+)
+router.include_router(
+    corrections.router, prefix="/corrections", tags=["Corrections"],
     dependencies=[Depends(require_reviewer)],
 )
 
